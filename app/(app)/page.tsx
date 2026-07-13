@@ -7,7 +7,7 @@ import {
   PriorityBadge,
 } from "@/components/badges";
 import { LiveDuration } from "@/components/live-duration";
-import { formatDate, jobCode } from "@/lib/format";
+import { formatDate, formatDateTime, jobCode } from "@/lib/format";
 import type { JobStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -181,6 +181,11 @@ export default async function DashboardPage({
                               <span className="text-blue-700 font-medium">
                                 {activeStage.name}
                               </span>
+                              {activeStage.startedAt && (
+                                <span>
+                                  {" "}since {formatDateTime(activeStage.startedAt)}
+                                </span>
+                              )}
                             </>
                           )}
                         </p>

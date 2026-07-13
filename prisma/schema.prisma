@@ -32,6 +32,7 @@ model User {
   timeLogsStarted TimeLog[] @relation("TimeLogStartedBy")
   timeLogsEnded   TimeLog[] @relation("TimeLogEndedBy")
   auditLogs      AuditLog[]
+  attachments    JobAttachment[] @relation("AttachmentUploadedBy")
 }
 
 model UserUnit {
@@ -145,11 +146,36 @@ model Job {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  stages   Stage[]
-  timeLogs TimeLog[]
-  issues   Issue[]
+  stages      Stage[]
+  timeLogs    TimeLog[]
+  issues      Issue[]
+  attachments JobAttachment[]
 
   @@index([unitId, status])
+}
+
+// Drawings / bill of material / other documents attached to a job. Stored in
+// Postgres so the app stays a single deployable with no file-storage service.
+enum AttachmentKind {
+  DRAWING
+  BOM
+  OTHER
+}
+
+model JobAttachment {
+  id           String         @id @default(cuid())
+  jobId        String
+  job          Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  kind         AttachmentKind
+  filename     String
+  mimeType     String
+  size         Int
+  data         Bytes
+  uploadedById String
+  uploadedBy   User           @relation("AttachmentUploadedBy", fields: [uploadedById], references: [id])
+  createdAt    DateTime       @default(now())
+
+  @@index([jobId])
 }
 
 enum StageStatus {

@@ -59,6 +59,32 @@ export function JobCreateForm({ units, templates }: Props) {
         />
       </div>
 
+      {/* Drawings & BOM */}
+      <fieldset className="border border-slate-200 rounded-lg p-3 space-y-3">
+        <legend className="text-sm font-semibold px-1">Job documents</legend>
+        <div>
+          <label className={labelCls}>Drawings (PDF, DWG, images…)</label>
+          <input
+            type="file"
+            name="drawings"
+            multiple
+            className="w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-slate-200"
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Bill of Material (PDF, Excel…)</label>
+          <input
+            type="file"
+            name="bomFiles"
+            multiple
+            className="w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-slate-200"
+          />
+        </div>
+        <p className="text-xs text-slate-500">
+          Up to 10 MB per file. More documents can be added later from the job page.
+        </p>
+      </fieldset>
+
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Expected completion date *</label>

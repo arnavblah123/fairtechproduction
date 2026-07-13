@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireUser, isAdmin, assertUnitAccess } from "@/lib/permissions";
 import { syncJobToCalendar, deleteCalendarEvent } from "@/lib/google-calendar";
+import { readUploadedFiles, type PendingAttachment } from "@/lib/attachments";
 import type { JobStatus } from "@prisma/client";
 import type { FormState } from "./auth";
 
@@ -66,6 +67,18 @@ export async function createJob(
     return { error: "Pick a template or enter at least one custom stage." };
   }
 
+  // Drawings & bill of material, validated and buffered before anything is
+  // written to the database.
+  let attachments: PendingAttachment[];
+  try {
+    attachments = [
+      ...(await readUploadedFiles(formData.getAll("drawings"), "DRAWING")),
+      ...(await readUploadedFiles(formData.getAll("bomFiles"), "BOM")),
+    ];
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+
   const job = await db.$transaction(async (tx) => {
     let usedTemplateId = templateId;
 
@@ -101,7 +114,20 @@ export async function createJob(
         },
       },
     });
-    await audit(user.id, "job.create", "Job", created.id, { clientName, unitId }, tx);
+    if (attachments.length > 0) {
+      await tx.jobAttachment.createMany({
+        data: attachments.map((a) => ({
+          ...a,
+          jobId: created.id,
+          uploadedById: user.id,
+        })),
+      });
+    }
+    await audit(user.id, "job.create", "Job", created.id, {
+      clientName,
+      unitId,
+      attachments: attachments.map((a) => a.filename),
+    }, tx);
     return created;
   }).catch((err: Error) => ({ error: err.message }));
 

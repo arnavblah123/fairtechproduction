@@ -52,6 +52,15 @@ A user can be assigned multiple units (people move between units).
   cross-checks.
 - **Issues** — material/labour shortage flags raised by supervisors; shown as
   red badges on the job and dashboard, not buried in a log.
+- **Job documents** — drawings and bill of material can be uploaded while
+  creating a job (and added later from the job page, admins only). Files are
+  stored in Postgres (up to 10 MB each) so there's no separate file-storage
+  service to pay for or configure; downloads are login-protected and
+  unit-scoped. If drawings grow large over time, watch database size — moving
+  to object storage (e.g. Cloudflare R2's free tier) is a contained change.
+- **Stage times** — each stage card shows when it was started and finished
+  (with total duration), and the dashboard shows how long the current stage
+  has been running.
 - **Audit trail** — every state change is written to `AuditLog`, attributed to
   a user, or to `system (auto)` for attendance-driven changes.
 

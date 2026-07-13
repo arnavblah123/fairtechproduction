@@ -14,6 +14,9 @@ import {
 import { LiveDuration } from "@/components/live-duration";
 import { formatDate, formatDateTime, formatDuration, jobCode } from "@/lib/format";
 import { googleCalendarLink, isCalendarConfigured } from "@/lib/google-calendar";
+import { AttachmentUpload } from "@/components/attachment-upload";
+import { deleteAttachment } from "@/lib/actions/attachments";
+import { ATTACHMENT_KIND_LABELS, formatFileSize } from "@/lib/attachments";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +48,18 @@ export default async function JobPage({
       issues: {
         orderBy: { createdAt: "desc" },
         include: { raisedBy: true, resolvedBy: true },
+      },
+      attachments: {
+        orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          kind: true,
+          filename: true,
+          mimeType: true,
+          size: true,
+          createdAt: true,
+          uploadedBy: { select: { name: true } },
+        },
       },
       timeLogs: {
         orderBy: { startedAt: "desc" },
@@ -180,6 +195,47 @@ export default async function JobPage({
         </div>
       </div>
 
+      {/* Documents: drawings & bill of material */}
+      <section className="bg-white rounded-xl shadow-sm p-4">
+        <h2 className="font-semibold mb-3">Documents</h2>
+        {job.attachments.length === 0 && (
+          <p className="text-sm text-slate-400 mb-3">
+            No drawings or BOM uploaded yet.
+          </p>
+        )}
+        <ul className="space-y-1.5 mb-4">
+          {job.attachments.map((att) => (
+            <li
+              key={att.id}
+              className="flex flex-wrap items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 text-sm"
+            >
+              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-800 whitespace-nowrap">
+                {ATTACHMENT_KIND_LABELS[att.kind]}
+              </span>
+              <a
+                href={`/api/attachments/${att.id}`}
+                className="font-medium text-blue-700 hover:underline break-all"
+              >
+                {att.filename}
+              </a>
+              <span className="text-xs text-slate-400">
+                {formatFileSize(att.size)} · {att.uploadedBy.name} ·{" "}
+                {formatDateTime(att.createdAt)}
+              </span>
+              {admin && (
+                <form action={deleteAttachment} className="ml-auto">
+                  <input type="hidden" name="attachmentId" value={att.id} />
+                  <button className="text-xs text-red-600 hover:underline">
+                    Delete
+                  </button>
+                </form>
+              )}
+            </li>
+          ))}
+        </ul>
+        {admin && <AttachmentUpload jobId={job.id} />}
+      </section>
+
       {/* Issues */}
       <section className="bg-white rounded-xl shadow-sm p-4">
         <h2 className="font-semibold mb-3">Issues</h2>
@@ -256,6 +312,27 @@ export default async function JobPage({
                 </p>
                 <StageStatusBadge status={stage.status} />
               </div>
+
+              {/* Start / end time of this stage */}
+              {stage.startedAt && (
+                <p className="text-xs text-slate-500 leading-snug">
+                  Started {formatDateTime(stage.startedAt)}
+                  {stage.completedAt ? (
+                    <>
+                      <br />
+                      Finished {formatDateTime(stage.completedAt)} (
+                      {formatDuration(stage.startedAt, stage.completedAt)})
+                    </>
+                  ) : (
+                    stage.status === "ACTIVE" && (
+                      <>
+                        {" · running "}
+                        <LiveDuration since={stage.startedAt} />
+                      </>
+                    )
+                  )}
+                </p>
+              )}
 
               {/* Workers on this stage */}
               {stage.timeLogs.length > 0 && (
