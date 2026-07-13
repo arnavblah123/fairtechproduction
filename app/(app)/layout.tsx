@@ -44,8 +44,19 @@ export default async function AppLayout({
             </ul>
           </nav>
           <div className="flex items-center gap-2 text-sm">
-            <span className="hidden sm:inline text-slate-300">{user.name}</span>
-            <RoleBadge role={user.role} />
+            <Link
+              href="/account"
+              className="hidden sm:inline text-slate-300 hover:text-white"
+              title="My account"
+            >
+              {user.name}
+            </Link>
+            <Link href="/account" className="sm:hidden" title="My account">
+              <RoleBadge role={user.role} />
+            </Link>
+            <span className="hidden sm:inline">
+              <RoleBadge role={user.role} />
+            </span>
             <form action={logout}>
               <button className="px-2 py-1 rounded hover:bg-slate-700 text-slate-300">
                 Logout
