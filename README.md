@@ -74,28 +74,48 @@ Isolated in `lib/attendance/` — nothing else in the app knows about the vendor
   `PollAdapter` if the vendor only offers a pull API) in
   `lib/attendance/adapters.ts` and register it. No core logic changes needed.
 
-## Calendar / reminders
+## Google Calendar
 
-Every job's mandatory expected-completion date is exposed as an iCal feed at
-`/api/calendar` (all-day event + reminder N days before, configurable per job,
-default 7). Download it or subscribe from Google Calendar / Apple Calendar /
-Outlook.
+Two layers, both free:
 
-**Config decision pending:** direct Google Calendar API push (events appear in
-a chosen Google account automatically) is possible but needs a Google Cloud
-service account and a target calendar — confirm which account/calendar to use
-and it can be added without touching the rest of the app.
+1. **"Add deadline to Google Calendar" button** on every job page — opens
+   Google Calendar (Android app or web) with the deadline pre-filled. Works
+   with zero setup.
+2. **Automatic company-calendar sync** — when configured, every job's deadline
+   is pushed into a shared Google Calendar automatically on create/edit
+   (all-day event + popup reminder N days before, configurable per job,
+   default 7). Completing or deleting a job removes the event. Sync is
+   best-effort: calendar problems never block job operations, and failures
+   are recorded in the audit trail.
+
+One-time setup for the automatic sync (~5 minutes, no cost):
+
+1. In [Google Cloud Console](https://console.cloud.google.com), create a
+   project and enable the **Google Calendar API**.
+2. Create a **service account** (IAM → Service Accounts) and download a JSON
+   key for it.
+3. In Google Calendar (with the fairtechindia@gmail.com account), create a
+   calendar (e.g. "Fairtech Job Deadlines"), open its settings → *Share with
+   specific people* → add the service account's email with **"Make changes to
+   events"** permission. Then share that calendar with your team the normal
+   way.
+4. From the calendar's settings → *Integrate calendar*, copy the **Calendar
+   ID**, and set in `.env`:
+   - `GOOGLE_SERVICE_ACCOUNT_EMAIL` — the service account's email
+   - `GOOGLE_PRIVATE_KEY` — the `private_key` value from the JSON key
+   - `GOOGLE_CALENDAR_ID` — the calendar ID
 
 ## Open questions (from the build spec)
 
-1. **Attendance vendor** — which biometric system is in use, and does it push
-   webhooks or only expose a pull API? The stub supports both patterns.
-2. **Calendar target** — iCal feed works today; Google Calendar push needs the
-   account decision above.
+1. **Attendance vendor** — deferred by decision; the isolated stub stays in
+   place (webhook endpoint + simulator) until the vendor is confirmed.
+2. **Calendar target** — resolved: Google Calendar (see above).
 3. **Scale** — current stack comfortably handles dozens of concurrent
    supervisors/admins on a small Postgres instance.
-4. **Hosting** — works on Vercel + managed Postgres (Neon/Supabase/RDS) or
-   on-prem (any box with Node 20+ and Postgres). `npm run build && npm start`.
+4. **Hosting** — recommended: **Vercel (Hobby, free)** + **Neon Postgres
+   (free tier)** ≈ ₹0/month to start; upgrade only if usage demands it.
+   On-prem also works (any box with Node 20+ and Postgres):
+   `npm run build && npm start`.
 
 ## Project layout
 
@@ -103,10 +123,10 @@ and it can be added without touching the rest of the app.
 app/(app)/          protected pages (dashboard, jobs, templates, employees,
                     issues, attendance, users, audit)
 app/login/          login page
-app/api/attendance/ attendance webhook endpoint
-app/api/calendar/   iCal feed
+app/api/attendance/ attendance webhook endpoint (stub until vendor confirmed)
 lib/actions/        server actions (all mutations, permission-checked)
 lib/attendance/     isolated attendance module (types, adapters, processor)
-lib/                db client, sessions, permissions, audit helper, iCal
+lib/                db client, sessions, permissions, audit helper,
+                    Google Calendar sync (lib/google-calendar.ts)
 prisma/             schema, migrations, seed
 ```

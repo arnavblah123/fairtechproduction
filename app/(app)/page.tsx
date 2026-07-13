@@ -122,12 +122,6 @@ export default async function DashboardPage({
         <button className="rounded-lg bg-slate-900 text-white px-4 py-1.5 text-sm">
           Filter
         </button>
-        <a
-          href="/api/calendar"
-          className="ml-auto text-sm text-blue-600 hover:underline"
-        >
-          📅 Download deadline calendar (.ics)
-        </a>
       </form>
 
       {/* Units side by side */}

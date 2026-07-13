@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireUser, isAdmin, assertUnitAccess } from "@/lib/permissions";
+import { syncJobToCalendar, deleteCalendarEvent } from "@/lib/google-calendar";
 import type { JobStatus } from "@prisma/client";
 import type { FormState } from "./auth";
 
@@ -105,6 +106,7 @@ export async function createJob(
   }).catch((err: Error) => ({ error: err.message }));
 
   if ("error" in job) return { error: job.error };
+  await syncJobToCalendar(job.id); // best-effort; never blocks job creation
   revalidatePath("/");
   revalidatePath("/jobs");
   redirect(`/jobs/${job.id}`);
@@ -140,6 +142,7 @@ export async function updateJob(
     },
   });
   await audit(user.id, "job.update", "Job", jobId);
+  await syncJobToCalendar(jobId); // date/reminder may have changed
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/jobs");
   return undefined;
@@ -171,6 +174,7 @@ export async function setJobStatus(formData: FormData) {
     }
     await audit(user.id, "job.status", "Job", jobId, { status }, tx);
   });
+  await syncJobToCalendar(jobId); // completing a job removes its calendar event
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/jobs");
   revalidatePath("/");
@@ -180,8 +184,10 @@ export async function deleteJob(formData: FormData) {
   const user = await requireUser();
   if (user.role !== "SUPERADMIN") throw new Error("Only the superadmin can delete jobs.");
   const jobId = String(formData.get("jobId") ?? "");
+  const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
   await db.job.delete({ where: { id: jobId } });
   await audit(user.id, "job.delete", "Job", jobId);
+  if (job.googleEventId) await deleteCalendarEvent(job.googleEventId, jobId);
   revalidatePath("/jobs");
   revalidatePath("/");
   redirect("/jobs");

@@ -13,6 +13,7 @@ import {
 } from "@/components/badges";
 import { LiveDuration } from "@/components/live-duration";
 import { formatDate, formatDateTime, formatDuration, jobCode } from "@/lib/format";
+import { googleCalendarLink, isCalendarConfigured } from "@/lib/google-calendar";
 
 export const dynamic = "force-dynamic";
 
@@ -105,6 +106,33 @@ export default async function JobPage({
                 </div>
               )}
             </dl>
+            <div className="mt-2 flex items-center gap-3 text-sm">
+              <a
+                href={googleCalendarLink({
+                  jobNumber: job.jobNumber,
+                  clientName: job.clientName,
+                  description: job.description,
+                  expectedCompletion: job.expectedCompletion,
+                  unitName: job.unit.name,
+                })}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                📅 Add deadline to Google Calendar
+              </a>
+              {isCalendarConfigured() && (
+                <span
+                  className={`text-xs ${
+                    job.googleEventId ? "text-green-700" : "text-slate-400"
+                  }`}
+                >
+                  {job.googleEventId
+                    ? "✓ Synced to company calendar"
+                    : "Not yet synced to company calendar"}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
