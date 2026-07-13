@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Auth & access ----------
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  SUPERVISOR
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  passwordHash String
+  role         Role
+  active       Boolean    @default(true)
+  units        UserUnit[] // units this user is scoped to (ignored for SUPERADMIN: sees all)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  jobsCreated    Job[]      @relation("JobCreatedBy")
+  issuesRaised   Issue[]    @relation("IssueRaisedBy")
+  issuesResolved Issue[]    @relation("IssueResolvedBy")
+  timeLogsStarted TimeLog[] @relation("TimeLogStartedBy")
+  timeLogsEnded   TimeLog[] @relation("TimeLogEndedBy")
+  auditLogs      AuditLog[]
+}
+
+model UserUnit {
+  userId String
+  unitId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@id([userId, unitId])
+}
+
+// ---------- Org ----------
+
+model Unit {
+  id       String @id @default(cuid())
+  name     String @unique
+  location String
+  code     String @unique // short code e.g. CH1, CH2, SV3
+
+  users     UserUnit[]
+  employees Employee[]
+  jobs      Job[]
+  timeLogs  TimeLog[]
+  issues    Issue[]
+  transfersIn  UnitTransfer[] @relation("TransferTo")
+  transfersOut UnitTransfer[] @relation("TransferFrom")
+}
+
+model Employee {
+  id            String  @id @default(cuid())
+  name          String
+  code          String  @unique // employee code, also the key used by the attendance system
+  skill         String // welder, fitter, helper, ...
+  contact       String?
+  primaryUnitId String
+  primaryUnit   Unit    @relation(fields: [primaryUnitId], references: [id])
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  transfers UnitTransfer[]
+  timeLogs  TimeLog[]
+}
+
+// Log of unit membership over time. The open row (toDate = null) is the current unit.
+model UnitTransfer {
+  id         String    @id @default(cuid())
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  fromUnitId String?
+  fromUnit   Unit?     @relation("TransferFrom", fields: [fromUnitId], references: [id])
+  toUnitId   String
+  toUnit     Unit      @relation("TransferTo", fields: [toUnitId], references: [id])
+  fromDate   DateTime  @default(now())
+  toDate     DateTime?
+
+  @@index([employeeId])
+}
+
+// ---------- Process library ----------
+
+model JobTemplate {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  description String?
+  active      Boolean         @default(true)
+  stages      TemplateStage[]
+  jobs        Job[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model TemplateStage {
+  id          String      @id @default(cuid())
+  templateId  String
+  template    JobTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  sequence    Int
+
+  @@index([templateId])
+}
+
+// ---------- Jobs ----------
+
+enum JobStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+}
+
+model Job {
+  id                 String    @id @default(cuid())
+  jobNumber          Int       @unique @default(autoincrement())
+  clientName         String
+  buyerName          String?
+  poNumber           String?
+  description        String // equipment type / description
+  unitId             String
+  unit               Unit      @relation(fields: [unitId], references: [id])
+  expectedCompletion DateTime
+  reminderDaysBefore Int       @default(7)
+  status             JobStatus @default(NOT_STARTED)
+  priority           Boolean   @default(false)
+  templateId         String?
+  template           JobTemplate? @relation(fields: [templateId], references: [id])
+  createdById        String
+  createdBy          User      @relation("JobCreatedBy", fields: [createdById], references: [id])
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  stages   Stage[]
+  timeLogs TimeLog[]
+  issues   Issue[]
+
+  @@index([unitId, status])
+}
+
+enum StageStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  DONE
+}
+
+model Stage {
+  id          String      @id @default(cuid())
+  jobId       String
+  job         Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  sequence    Int
+  status      StageStatus @default(PENDING)
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  timeLogs TimeLog[]
+
+  @@index([jobId])
+}
+
+// ---------- Time tracking (the audit trail that powers the dashboard) ----------
+
+enum LogSource {
+  MANUAL // supervisor action in the app
+  AUTO_ATTENDANCE // attendance system login/logout event
+}
+
+model TimeLog {
+  id          String     @id @default(cuid())
+  employeeId  String
+  employee    Employee   @relation(fields: [employeeId], references: [id])
+  jobId       String
+  job         Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  stageId     String
+  stage       Stage      @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  unitId      String
+  unit        Unit       @relation(fields: [unitId], references: [id])
+  startedAt   DateTime   @default(now())
+  endedAt     DateTime?
+  startSource LogSource  @default(MANUAL)
+  endSource   LogSource?
+  startedById String? // user who assigned, null when auto
+  startedBy   User?      @relation("TimeLogStartedBy", fields: [startedById], references: [id])
+  endedById   String?
+  endedBy     User?      @relation("TimeLogEndedBy", fields: [endedById], references: [id])
+
+  @@index([employeeId, endedAt])
+  @@index([stageId, endedAt])
+  @@index([jobId])
+}
+
+// ---------- Issues ----------
+
+enum IssueType {
+  MATERIAL_SHORTAGE
+  LABOUR_SHORTAGE
+  OTHER
+}
+
+enum IssueStatus {
+  OPEN
+  RESOLVED
+}
+
+model Issue {
+  id           String      @id @default(cuid())
+  jobId        String
+  job          Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  unitId       String
+  unit         Unit        @relation(fields: [unitId], references: [id])
+  type         IssueType
+  description  String
+  status       IssueStatus @default(OPEN)
+  raisedById   String
+  raisedBy     User        @relation("IssueRaisedBy", fields: [raisedById], references: [id])
+  resolvedById String?
+  resolvedBy   User?       @relation("IssueResolvedBy", fields: [resolvedById], references: [id])
+  resolvedAt   DateTime?
+  createdAt    DateTime    @default(now())
+
+  @@index([unitId, status])
+  @@index([jobId, status])
+}
+
+// ---------- Audit ----------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String? // null = automatic/system action (e.g. attendance webhook)
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String // e.g. job.create, stage.assign, timelog.autoClose
+  entityType String
+  entityId   String
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// ---------- Attendance integration (isolated module; raw event inbox) ----------
+
+enum AttendanceEventType {
+  LOGIN
+  LOGOUT
+}
+
+model AttendanceEvent {
+  id           String              @id @default(cuid())
+  employeeCode String
+  eventType    AttendanceEventType
+  occurredAt   DateTime
+  raw          Json? // raw vendor payload, kept for debugging once real vendor is wired in
+  processedAt  DateTime?
+  result       String? // human-readable outcome of processing
+  createdAt    DateTime            @default(now())
+
+  @@index([employeeCode, occurredAt])
+}
+
+// ---------- App settings ----------
+
+model Setting {
+  key   String @id
+  value String
+}
