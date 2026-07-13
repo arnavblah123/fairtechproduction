@@ -187,7 +187,13 @@ export async function setJobStatus(formData: FormData) {
   }
 
   await db.$transaction(async (tx) => {
-    await tx.job.update({ where: { id: jobId }, data: { status } });
+    await tx.job.update({
+      where: { id: jobId },
+      data: {
+        status,
+        completedAt: status === "COMPLETED" ? new Date() : null,
+      },
+    });
     if (status === "COMPLETED") {
       // Close any still-open time logs on this job.
       const open = await tx.timeLog.findMany({ where: { jobId, endedAt: null } });
