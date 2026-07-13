@@ -4,7 +4,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Runtime connection — on Neon use the POOLED string (-pooler host).
+  url       = env("DATABASE_URL")
+  // Migrations/seed connection — on Neon use the DIRECT string (no -pooler).
+  // Locally, set it to the same value as DATABASE_URL.
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------- Auth & access ----------
