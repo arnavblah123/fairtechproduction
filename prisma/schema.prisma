@@ -142,6 +142,7 @@ model Job {
   reminderDaysBefore Int       @default(7)
   status             JobStatus @default(NOT_STARTED)
   priority           Boolean   @default(false)
+  completedAt        DateTime? // set when status moves to COMPLETED, cleared if reopened
   googleEventId      String? // Google Calendar event backing the deadline reminder
   templateId         String?
   template           JobTemplate? @relation(fields: [templateId], references: [id])
