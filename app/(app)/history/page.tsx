@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser, unitScope } from "@/lib/permissions";
 import { formatDate, jobCode } from "@/lib/format";
+import { jobSpanBreakdown, fmtIdle } from "@/lib/idle";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ type HistoryRow = {
   expectedCompletion: Date;
   calendarDays: number | null;
   manMinutes: number;
+  idleMinutes: number | null; // gap time with nobody clocked on, within the span
   daysLate: number; // negative = finished early
 };
 
@@ -77,6 +79,7 @@ export default async function HistoryPage({
       const end = l.endedAt ?? completedAt;
       return sum + Math.max(0, end.getTime() - l.startedAt.getTime()) / 60000;
     }, 0);
+    const breakdown = jobSpanBreakdown(job.timeLogs, completedAt);
     const daysLate = Math.round(
       (completedAt.getTime() - job.expectedCompletion.getTime()) / 86400000
     );
@@ -92,6 +95,7 @@ export default async function HistoryPage({
       expectedCompletion: job.expectedCompletion,
       calendarDays,
       manMinutes,
+      idleMinutes: breakdown ? breakdown.idleMinutes : null,
       daysLate,
     };
   });
@@ -138,6 +142,10 @@ export default async function HistoryPage({
               ? withDays.reduce((s, r) => s + (r.calendarDays ?? 0), 0) / withDays.length
               : null;
             const avgHours = list.reduce((s, r) => s + r.manMinutes, 0) / list.length / 60;
+            const withIdle = list.filter((r) => r.idleMinutes !== null);
+            const avgIdle = withIdle.length
+              ? withIdle.reduce((s, r) => s + (r.idleMinutes ?? 0), 0) / withIdle.length
+              : null;
             const onTime = list.filter((r) => r.daysLate <= 0).length;
             return (
               <div key={name} className="bg-white rounded-xl shadow-sm p-4">
@@ -146,6 +154,9 @@ export default async function HistoryPage({
                   <span><b>{list.length}</b> job{list.length === 1 ? "" : "s"}</span>
                   {avgDays !== null && <span>avg <b>{avgDays.toFixed(1)}</b> days</span>}
                   <span>avg <b>{avgHours.toFixed(1)}</b> man-hours</span>
+                  {avgIdle !== null && (
+                    <span>avg <b>{fmtIdle(avgIdle)}</b> idle</span>
+                  )}
                   <span className={onTime === list.length ? "text-green-700" : "text-amber-700"}>
                     {onTime}/{list.length} on time
                   </span>
@@ -167,6 +178,7 @@ export default async function HistoryPage({
               <th className="px-4 py-3">Completed</th>
               <th className="px-4 py-3">Days</th>
               <th className="px-4 py-3">Man-hours</th>
+              <th className="px-4 py-3">Idle</th>
               <th className="px-4 py-3">Vs plan</th>
             </tr>
           </thead>
@@ -188,6 +200,15 @@ export default async function HistoryPage({
                 <td className="px-4 py-3">{r.calendarDays ?? "—"}</td>
                 <td className="px-4 py-3 whitespace-nowrap">{fmtManHours(r.manMinutes)}</td>
                 <td className="px-4 py-3 whitespace-nowrap">
+                  {r.idleMinutes === null ? (
+                    "—"
+                  ) : r.idleMinutes > 0 ? (
+                    <span className="text-amber-700 font-medium">{fmtIdle(r.idleMinutes)}</span>
+                  ) : (
+                    <span className="text-green-700">none</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
                   {r.daysLate > 0 ? (
                     <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
                       {r.daysLate}d late
@@ -206,7 +227,7 @@ export default async function HistoryPage({
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
                   No completed jobs yet. Once jobs are marked completed, they appear
                   here with their timings for comparison.
                 </td>
@@ -217,8 +238,10 @@ export default async function HistoryPage({
       </div>
       <p className="text-xs text-slate-500">
         Days = calendar days from the first worker assignment to completion.
-        Man-hours = total clocked time across all workers and stages. Click a job
-        for its full stage-by-stage timing.
+        Man-hours = total clocked time across all workers and stages.
+        Idle = time within that span when nobody was clocked on the job
+        (includes nights and holidays between shifts). Click a job for its full
+        stage-by-stage timing.
       </p>
     </div>
   );

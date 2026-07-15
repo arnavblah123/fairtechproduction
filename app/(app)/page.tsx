@@ -57,6 +57,26 @@ export default async function DashboardPage({
   ).size;
   const openIssueCount = jobs.reduce((n, j) => n + j.issues.length, 0);
 
+  // Jobs in progress with nobody clocked on = idle right now. "Since" is the
+  // last time anyone stopped work (or the active stage start if never worked).
+  const idleJobs = jobs.filter(
+    (j) => j.status === "IN_PROGRESS" && j.timeLogs.length === 0
+  );
+  const lastEnded = idleJobs.length
+    ? await db.timeLog.groupBy({
+        by: ["jobId"],
+        where: { jobId: { in: idleJobs.map((j) => j.id) } },
+        _max: { endedAt: true },
+      })
+    : [];
+  const idleSince = new Map<string, Date>();
+  for (const job of idleJobs) {
+    const ended = lastEnded.find((g) => g.jobId === job.id)?._max.endedAt;
+    const fallback =
+      job.stages.find((s) => s.status === "ACTIVE")?.startedAt ?? job.updatedAt;
+    idleSince.set(job.id, ended ?? fallback);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -170,6 +190,11 @@ export default async function DashboardPage({
                             {job.priority && <PriorityBadge />}
                             {job.issues.length > 0 && (
                               <IssueBadge count={job.issues.length} />
+                            )}
+                            {idleSince.has(job.id) && (
+                              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap bg-amber-100 text-amber-800">
+                                Idle <LiveDuration since={idleSince.get(job.id)!} />
+                              </span>
                             )}
                           </div>
                         </div>

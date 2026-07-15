@@ -79,6 +79,15 @@ export default async function JobPage({
   const openIssues = job.issues.filter((i) => i.status === "OPEN");
   const admin = isAdmin(user);
 
+  // Live idle indicator: in progress but nobody clocked on right now.
+  const openLogCount = job.stages.reduce((n, s) => n + s.timeLogs.length, 0);
+  const isIdle = job.status === "IN_PROGRESS" && openLogCount === 0;
+  const idleSince = isIdle
+    ? job.timeLogs.find((l) => l.endedAt)?.endedAt ??
+      job.stages.find((s) => s.status === "ACTIVE")?.startedAt ??
+      job.updatedAt
+    : null;
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -91,6 +100,11 @@ export default async function JobPage({
               <JobStatusBadge status={job.status} />
               {job.priority && <PriorityBadge />}
               {openIssues.length > 0 && <IssueBadge count={openIssues.length} />}
+              {idleSince && (
+                <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap bg-amber-100 text-amber-800">
+                  Nobody working — idle <LiveDuration since={idleSince} />
+                </span>
+              )}
             </div>
             <p className="text-slate-600 mt-1">{job.description}</p>
             <dl className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1 text-sm">
