@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/permissions";
 import { logout } from "@/lib/actions/auth";
 import { RoleBadge } from "@/components/badges";
+import { MobileNav } from "@/components/mobile-nav";
 
 export default async function AppLayout({
   children,
@@ -30,7 +31,8 @@ export default async function AppLayout({
           <Link href="/" className="font-bold whitespace-nowrap">
             Fairtech
           </Link>
-          <nav className="flex-1 overflow-x-auto">
+          {/* Desktop nav; phones use the bottom tab bar instead */}
+          <nav className="flex-1 overflow-x-auto hidden sm:block">
             <ul className="flex gap-1 text-sm">
               {links.map((l) => (
                 <li key={l.href}>
@@ -52,13 +54,13 @@ export default async function AppLayout({
             >
               {user.name}
             </Link>
-            <Link href="/account" className="sm:hidden" title="My account">
+            <Link href="/more" className="sm:hidden" title="Menu">
               <RoleBadge role={user.role} />
             </Link>
             <span className="hidden sm:inline">
               <RoleBadge role={user.role} />
             </span>
-            <form action={logout}>
+            <form action={logout} className="hidden sm:block">
               <button className="px-2 py-1 rounded hover:bg-slate-700 text-slate-300">
                 Logout
               </button>
@@ -66,7 +68,9 @@ export default async function AppLayout({
           </div>
         </div>
       </header>
-      <main className="max-w-7xl mx-auto p-4">{children}</main>
+      {/* Bottom padding on phones so content never hides behind the tab bar */}
+      <main className="max-w-7xl mx-auto p-4 pb-20 sm:pb-4">{children}</main>
+      <MobileNav />
     </div>
   );
 }

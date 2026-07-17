@@ -365,7 +365,7 @@ export default async function JobPage({
                       <form action={stopWorker}>
                         <input type="hidden" name="timeLogId" value={log.id} />
                         <button
-                          className="text-xs text-red-600 hover:underline"
+                          className="text-xs font-medium text-red-600 rounded-lg px-2.5 py-1.5 hover:bg-red-50 active:bg-red-100"
                           title="Stop this worker's clock"
                         >
                           Stop
@@ -395,7 +395,7 @@ export default async function JobPage({
                       </option>
                     ))}
                   </select>
-                  <button className="rounded-lg bg-blue-600 text-white px-2.5 text-sm">
+                  <button className="rounded-lg bg-blue-600 text-white px-3.5 py-1.5 text-sm active:bg-blue-700">
                     ➜
                   </button>
                 </form>
@@ -407,7 +407,7 @@ export default async function JobPage({
                   <form action={setStageStatus}>
                     <input type="hidden" name="stageId" value={stage.id} />
                     <input type="hidden" name="status" value="ACTIVE" />
-                    <button className="rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white">
+                    <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-blue-600 text-white active:bg-blue-700">
                       {stage.status === "DONE" ? "Reopen" : "Start"}
                     </button>
                   </form>
@@ -417,14 +417,14 @@ export default async function JobPage({
                     <form action={setStageStatus}>
                       <input type="hidden" name="stageId" value={stage.id} />
                       <input type="hidden" name="status" value="PAUSED" />
-                      <button className="rounded px-2 py-1 text-xs font-medium bg-amber-500 text-white">
+                      <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-amber-500 text-white active:bg-amber-600">
                         Pause
                       </button>
                     </form>
                     <form action={setStageStatus}>
                       <input type="hidden" name="stageId" value={stage.id} />
                       <input type="hidden" name="status" value="DONE" />
-                      <button className="rounded px-2 py-1 text-xs font-medium bg-green-600 text-white">
+                      <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-green-600 text-white active:bg-green-700">
                         Done
                       </button>
                     </form>
