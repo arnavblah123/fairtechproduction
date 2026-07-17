@@ -6,11 +6,27 @@ import path from "node:path";
 const db = new PrismaClient();
 
 async function main() {
+  // --- One-time rename (guarded): Chinchwad Unit-2 became Dehu Unit-2.
+  // Must run before the unit upserts so the existing CH2 row is renamed in
+  // place instead of a duplicate DH2 unit being created.
+  const renameKey = "patch.2026-07-17.ch2-renamed-dehu";
+  if (!(await db.setting.findUnique({ where: { key: renameKey } }))) {
+    const old = await db.unit.findUnique({ where: { code: "CH2" } });
+    if (old) {
+      await db.unit.update({
+        where: { id: old.id },
+        data: { name: "Dehu Unit-2", location: "Dehu, Pune", code: "DH2" },
+      });
+      console.log("Patch: renamed Chinchwad Unit-2 to Dehu Unit-2 (DH2).");
+    }
+    await db.setting.create({ data: { key: renameKey, value: "done" } });
+  }
+
   // --- Units ---
   const units = await Promise.all(
     [
       { name: "Chinchwad Unit-1", location: "Chinchwad, Pune", code: "CH1" },
-      { name: "Chinchwad Unit-2", location: "Chinchwad, Pune", code: "CH2" },
+      { name: "Dehu Unit-2", location: "Dehu, Pune", code: "DH2" },
       { name: "Savli Unit-3", location: "Savli, Vadodara", code: "SV3" },
     ].map((u) =>
       db.unit.upsert({ where: { code: u.code }, update: {}, create: u })

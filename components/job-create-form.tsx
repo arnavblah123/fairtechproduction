@@ -6,6 +6,8 @@ import { createJob } from "@/lib/actions/jobs";
 type Props = {
   units: { id: string; name: string }[];
   templates: { id: string; name: string; stageNames: string[] }[];
+  clientNames: string[];
+  buyerNames: string[];
 };
 
 const STANDARD_TESTS = [
@@ -23,7 +25,7 @@ const inputCls =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-base";
 const labelCls = "block text-sm font-medium mb-1";
 
-export function JobCreateForm({ units, templates }: Props) {
+export function JobCreateForm({ units, templates, clientNames, buyerNames }: Props) {
   const [state, action, pending] = useActionState(createJob, undefined);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [stagesText, setStagesText] = useState("");
@@ -66,11 +68,21 @@ export function JobCreateForm({ units, templates }: Props) {
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Client name *</label>
-          <input name="clientName" required className={inputCls} />
+          <input name="clientName" required list="client-names" className={inputCls} />
+          <datalist id="client-names">
+            {clientNames.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
         </div>
         <div>
           <label className={labelCls}>Buyer (if different)</label>
-          <input name="buyerName" className={inputCls} />
+          <input name="buyerName" list="buyer-names" className={inputCls} />
+          <datalist id="buyer-names">
+            {buyerNames.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
         </div>
         <div>
           <label className={labelCls}>PO number / reference</label>

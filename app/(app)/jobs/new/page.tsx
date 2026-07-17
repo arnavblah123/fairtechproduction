@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function NewJobPage() {
   const user = await requireUser();
-  const [units, templates] = await Promise.all([
+  const [units, templates, clients, buyers] = await Promise.all([
     db.unit.findMany({
       where: user.role === "SUPERADMIN" ? {} : { id: { in: user.unitIds } },
       orderBy: { name: "asc" },
@@ -15,6 +15,18 @@ export default async function NewJobPage() {
       where: { active: true },
       include: { stages: { orderBy: { sequence: "asc" } } },
       orderBy: { name: "asc" },
+    }),
+    // Previously used names, so spellings stay consistent across jobs.
+    db.job.findMany({
+      distinct: ["clientName"],
+      select: { clientName: true },
+      orderBy: { clientName: "asc" },
+    }),
+    db.job.findMany({
+      where: { buyerName: { not: null } },
+      distinct: ["buyerName"],
+      select: { buyerName: true },
+      orderBy: { buyerName: "asc" },
     }),
   ]);
 
@@ -28,6 +40,8 @@ export default async function NewJobPage() {
           name: t.name,
           stageNames: t.stages.map((s) => s.name),
         }))}
+        clientNames={clients.map((c) => c.clientName)}
+        buyerNames={buyers.map((b) => b.buyerName!).filter(Boolean)}
       />
     </div>
   );
