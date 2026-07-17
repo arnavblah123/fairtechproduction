@@ -102,6 +102,37 @@ async function main() {
     }
   }
 
+  // --- One-time transfer (guarded): Rajguru Hrushikesh appears on the Dehu
+  // Unit-2 roster but was imported into Unit-1 (U1-03) — record a proper
+  // transfer to Dehu rather than creating a duplicate.
+  const rajguruKey = "patch.2026-07-17.rajguru-to-dehu";
+  if (!(await db.setting.findUnique({ where: { key: rajguruKey } }))) {
+    const rajguru = await db.employee.findUnique({ where: { code: "U1-03" } });
+    if (rajguru && rajguru.primaryUnitId !== ch2.id) {
+      const now = new Date();
+      await db.$transaction([
+        db.unitTransfer.updateMany({
+          where: { employeeId: rajguru.id, toDate: null },
+          data: { toDate: now },
+        }),
+        db.unitTransfer.create({
+          data: {
+            employeeId: rajguru.id,
+            fromUnitId: rajguru.primaryUnitId,
+            toUnitId: ch2.id,
+            fromDate: now,
+          },
+        }),
+        db.employee.update({
+          where: { id: rajguru.id },
+          data: { primaryUnitId: ch2.id, skill: "Helper" },
+        }),
+      ]);
+      console.log("Patch: transferred Rajguru Hrushikesh (U1-03) to Dehu Unit-2.");
+    }
+    await db.setting.create({ data: { key: rajguruKey, value: "done" } });
+  }
+
   // --- Real employees (prisma/import/employees.json, extracted from the
   // unit muster registers). Idempotent: existing codes are left untouched,
   // so renames/transfers made in the app are never overwritten.

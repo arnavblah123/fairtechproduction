@@ -298,5 +298,125 @@
     "name": "Chiman Kaka",
     "skill": "Security",
     "unitCode": "SV3"
+  },
+  {
+    "code": "U2-01",
+    "name": "Kanhiya",
+    "skill": "Helper",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-02",
+    "name": "Aditya",
+    "skill": "Helper",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-03",
+    "name": "Harindra Paswan",
+    "skill": "Welder",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-04",
+    "name": "Md Juman",
+    "skill": "Helper",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-05",
+    "name": "Md Raju",
+    "skill": "Welder",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-06",
+    "name": "Suraj Yadav",
+    "skill": "Helper",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-07",
+    "name": "Rakesh Paswan",
+    "skill": "Cutter",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-08",
+    "name": "Arvind Yadav",
+    "skill": "Helper",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-09",
+    "name": "Sagar",
+    "skill": "Helper",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-10",
+    "name": "Mithun",
+    "skill": "Helper",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-11",
+    "name": "Virendar",
+    "skill": "Helper",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-12",
+    "name": "Dilip Kumar",
+    "skill": "Welder",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-13",
+    "name": "Rajan",
+    "skill": "Helper",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-14",
+    "name": "Samir",
+    "skill": "Helper",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-15",
+    "name": "Monu",
+    "skill": "Helper",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-16",
+    "name": "Bolu",
+    "skill": "Welder",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-17",
+    "name": "Abhay",
+    "skill": "Helper",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-18",
+    "name": "Vinay",
+    "skill": "Welder",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-19",
+    "name": "Dilip Patil",
+    "skill": "Helper",
+    "unitCode": "DH2"
+  },
+  {
+    "code": "U2-20",
+    "name": "Suraj K",
+    "skill": "Helper",
+    "unitCode": "DH2"
   }
 ]
