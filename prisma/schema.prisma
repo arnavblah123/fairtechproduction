@@ -157,6 +157,7 @@ model Job {
   issues      Issue[]
   attachments JobAttachment[]
   reworks     StageRework[]
+  tests       JobTest[]
 
   @@index([unitId, status])
 }
@@ -205,8 +206,25 @@ model Stage {
 
   timeLogs TimeLog[]
   reworks  StageRework[]
+  tests    JobTest[]
 
   @@index([jobId])
+}
+
+// Testing requirement on a job (DP / RT / Hydro / Kerosene-Leak / UT / …),
+// optionally tied to the stage after which it must happen. stageId null =
+// final/overall test.
+model JobTest {
+  id        String   @id @default(cuid())
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  stageId   String?
+  stage     Stage?   @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  name      String
+  createdAt DateTime @default(now())
+
+  @@index([jobId])
+  @@index([stageId])
 }
 
 // Rework recorded against a stage — the reason is mandatory. Recording

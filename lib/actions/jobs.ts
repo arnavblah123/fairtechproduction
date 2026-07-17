@@ -48,24 +48,40 @@ export async function createJob(
     return { error: "Expected completion date is invalid." };
   }
 
-  // Resolve the stage list: template or custom (one stage name per line).
-  let stages: { name: string; description: string | null }[] = [];
-  if (templateId) {
-    const template = await db.jobTemplate.findUnique({
-      where: { id: templateId },
-      include: { stages: { orderBy: { sequence: "asc" } } },
-    });
-    if (!template) return { error: "Selected template not found." };
-    stages = template.stages.map((s) => ({ name: s.name, description: s.description }));
-  } else {
-    stages = customStagesRaw
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((name) => ({ name, description: null }));
-  }
+  // Stage list always comes from the submitted lines — a template pre-fills
+  // them in the form but they are editable per job (the template itself is
+  // never modified). templateId is kept as a reference for reporting.
+  const stages = customStagesRaw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((name) => ({ name, description: null as string | null }));
   if (stages.length === 0) {
-    return { error: "Pick a template or enter at least one custom stage." };
+    return { error: "Enter at least one stage (or pick a template to pre-fill them)." };
+  }
+
+  // Testing plan: checked test types, each tied to a stage line (1-based
+  // index) or to the whole job (empty = final).
+  const tests: { name: string; stageIndex: number | null }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("test_") || value !== "on") continue;
+    const name = String(formData.get(`${key}_name`) ?? "").trim();
+    if (!name) continue;
+    const idxRaw = String(formData.get(`${key}_stage`) ?? "");
+    const idx = idxRaw ? Number(idxRaw) : NaN;
+    tests.push({
+      name,
+      stageIndex: Number.isInteger(idx) && idx >= 1 && idx <= stages.length ? idx : null,
+    });
+  }
+  const otherTest = String(formData.get("otherTest") ?? "").trim();
+  if (otherTest) {
+    const idxRaw = String(formData.get("otherTest_stage") ?? "");
+    const idx = idxRaw ? Number(idxRaw) : NaN;
+    tests.push({
+      name: otherTest,
+      stageIndex: Number.isInteger(idx) && idx >= 1 && idx <= stages.length ? idx : null,
+    });
   }
 
   // Drawings & bill of material, validated and buffered before anything is
@@ -83,7 +99,9 @@ export async function createJob(
   const job = await db.$transaction(async (tx) => {
     let usedTemplateId = templateId;
 
-    if (!templateId && saveAsTemplate) {
+    // Save the (possibly edited) stage list as a new template if asked —
+    // even when it started from an existing template.
+    if (saveAsTemplate) {
       const existing = await tx.jobTemplate.findUnique({ where: { name: saveAsTemplate } });
       if (existing) throw new Error(`A template named "${saveAsTemplate}" already exists.`);
       const newTemplate = await tx.jobTemplate.create({
@@ -115,6 +133,19 @@ export async function createJob(
         },
       },
     });
+    if (tests.length > 0) {
+      const createdStages = await tx.stage.findMany({
+        where: { jobId: created.id },
+        orderBy: { sequence: "asc" },
+      });
+      await tx.jobTest.createMany({
+        data: tests.map((t) => ({
+          jobId: created.id,
+          name: t.name,
+          stageId: t.stageIndex ? createdStages[t.stageIndex - 1]?.id ?? null : null,
+        })),
+      });
+    }
     if (attachments.length > 0) {
       await tx.jobAttachment.createMany({
         data: attachments.map((a) => ({

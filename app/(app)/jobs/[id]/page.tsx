@@ -5,6 +5,7 @@ import { requireUser, canAccessUnit, isAdmin } from "@/lib/permissions";
 import { setJobStatus, deleteJob } from "@/lib/actions/jobs";
 import { setStageStatus, assignWorker, stopWorker, addStage, recordRework } from "@/lib/actions/stages";
 import { raiseIssue, resolveIssue } from "@/lib/actions/issues";
+import { addJobTest, deleteJobTest } from "@/lib/actions/tests";
 import {
   JobStatusBadge,
   StageStatusBadge,
@@ -53,6 +54,10 @@ export default async function JobPage({
       issues: {
         orderBy: { createdAt: "desc" },
         include: { raisedBy: true, resolvedBy: true },
+      },
+      tests: {
+        orderBy: { createdAt: "asc" },
+        include: { stage: { select: { id: true, name: true, sequence: true } } },
       },
       attachments: {
         orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
@@ -272,6 +277,65 @@ export default async function JobPage({
         {admin && <AttachmentUpload jobId={job.id} />}
       </section>
 
+      {/* Testing requirements */}
+      <section className="bg-white rounded-xl shadow-sm p-4">
+        <h2 className="font-semibold mb-3">Testing</h2>
+        {job.tests.length === 0 && (
+          <p className="text-sm text-slate-400 mb-3">No tests recorded for this job.</p>
+        )}
+        <ul className="space-y-1.5 mb-4">
+          {job.tests.map((test) => (
+            <li
+              key={test.id}
+              className="flex flex-wrap items-center gap-2 bg-sky-50 rounded-lg px-3 py-2 text-sm"
+            >
+              <span className="font-medium text-sky-900">🧪 {test.name}</span>
+              <span className="text-xs text-slate-500">
+                {test.stage
+                  ? `after ${test.stage.sequence}. ${test.stage.name}`
+                  : "final / whole job"}
+              </span>
+              {admin && (
+                <form action={deleteJobTest} className="ml-auto">
+                  <input type="hidden" name="testId" value={test.id} />
+                  <button className="text-xs text-red-600 hover:underline">Remove</button>
+                </form>
+              )}
+            </li>
+          ))}
+        </ul>
+        {job.status !== "COMPLETED" && (
+          <form action={addJobTest} className="flex flex-wrap gap-2 items-center">
+            <input type="hidden" name="jobId" value={job.id} />
+            <input
+              name="name"
+              required
+              list="test-types"
+              placeholder="Add test…"
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm w-44"
+            />
+            <datalist id="test-types">
+              <option value="DP Test" />
+              <option value="RT Test" />
+              <option value="Hydro Test" />
+              <option value="Kerosene / Leak Test" />
+              <option value="UT Test" />
+            </datalist>
+            <select name="stageId" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
+              <option value="">Final (whole job)</option>
+              {job.stages.map((s) => (
+                <option key={s.id} value={s.id}>
+                  after {s.sequence}. {s.name}
+                </option>
+              ))}
+            </select>
+            <button className={`${btn} bg-sky-600 text-white hover:bg-sky-700`}>
+              + Add test
+            </button>
+          </form>
+        )}
+      </section>
+
       {/* Issues */}
       <section className="bg-white rounded-xl shadow-sm p-4">
         <h2 className="font-semibold mb-3">Issues</h2>
@@ -381,6 +445,22 @@ export default async function JobPage({
                     )
                   )}
                 </p>
+              )}
+
+              {/* Tests due after this stage */}
+              {job.tests.some((t) => t.stage?.id === stage.id) && (
+                <div className="flex flex-wrap gap-1">
+                  {job.tests
+                    .filter((t) => t.stage?.id === stage.id)
+                    .map((t) => (
+                      <span
+                        key={t.id}
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-sky-100 text-sky-800 whitespace-nowrap"
+                      >
+                        🧪 {t.name}
+                      </span>
+                    ))}
+                </div>
               )}
 
               {/* Workers on this stage */}
