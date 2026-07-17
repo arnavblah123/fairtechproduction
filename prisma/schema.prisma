@@ -37,6 +37,7 @@ model User {
   timeLogsEnded   TimeLog[] @relation("TimeLogEndedBy")
   auditLogs      AuditLog[]
   attachments    JobAttachment[] @relation("AttachmentUploadedBy")
+  reworks        StageRework[]   @relation("ReworkRaisedBy")
 }
 
 model UserUnit {
@@ -155,6 +156,7 @@ model Job {
   timeLogs    TimeLog[]
   issues      Issue[]
   attachments JobAttachment[]
+  reworks     StageRework[]
 
   @@index([unitId, status])
 }
@@ -202,7 +204,25 @@ model Stage {
   completedAt DateTime?
 
   timeLogs TimeLog[]
+  reworks  StageRework[]
 
+  @@index([jobId])
+}
+
+// Rework recorded against a stage — the reason is mandatory. Recording
+// rework on a Done stage reopens it.
+model StageRework {
+  id         String   @id @default(cuid())
+  stageId    String
+  stage      Stage    @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  jobId      String
+  job        Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  reason     String
+  raisedById String
+  raisedBy   User     @relation("ReworkRaisedBy", fields: [raisedById], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@index([stageId])
   @@index([jobId])
 }
 

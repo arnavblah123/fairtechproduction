@@ -136,6 +136,44 @@ export async function stopWorker(formData: FormData) {
   revalidatePath("/employees");
 }
 
+// Record rework on a stage. The reason is mandatory; recording rework on a
+// Done stage reopens it (this replaces the old bare "Reopen" button, so a
+// reason is always captured).
+export async function recordRework(formData: FormData) {
+  const user = await requireUser();
+  const stageId = String(formData.get("stageId") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return;
+  const stage = await db.stage.findUniqueOrThrow({
+    where: { id: stageId },
+    include: { job: true },
+  });
+  assertUnitAccess(user, stage.job.unitId);
+  if (stage.job.status === "COMPLETED") return;
+
+  await db.$transaction(async (tx) => {
+    const rework = await tx.stageRework.create({
+      data: { stageId, jobId: stage.jobId, reason, raisedById: user.id },
+    });
+    if (stage.status === "DONE") {
+      await tx.stage.update({
+        where: { id: stageId },
+        data: { status: "ACTIVE", completedAt: null },
+      });
+      if (stage.job.status === "NOT_STARTED") {
+        await tx.job.update({ where: { id: stage.jobId }, data: { status: "IN_PROGRESS" } });
+      }
+    }
+    await audit(user.id, "stage.rework", "Stage", stageId, {
+      jobId: stage.jobId,
+      reworkId: rework.id,
+      reason,
+      reopened: stage.status === "DONE",
+    }, tx);
+  });
+  revalidateJob(stage.jobId);
+}
+
 // Admins can append an extra stage to a job in progress.
 export async function addStage(formData: FormData) {
   const user = await requireUser();

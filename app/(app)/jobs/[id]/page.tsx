@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, canAccessUnit, isAdmin } from "@/lib/permissions";
 import { setJobStatus, deleteJob } from "@/lib/actions/jobs";
-import { setStageStatus, assignWorker, stopWorker, addStage } from "@/lib/actions/stages";
+import { setStageStatus, assignWorker, stopWorker, addStage, recordRework } from "@/lib/actions/stages";
 import { raiseIssue, resolveIssue } from "@/lib/actions/issues";
 import {
   JobStatusBadge,
@@ -43,6 +43,10 @@ export default async function JobPage({
           timeLogs: {
             where: { endedAt: null },
             include: { employee: true },
+          },
+          reworks: {
+            orderBy: { createdAt: "desc" },
+            include: { raisedBy: { select: { name: true } } },
           },
         },
       },
@@ -89,6 +93,7 @@ export default async function JobPage({
   ].filter((g) => g.list.length > 0);
 
   const openIssues = job.issues.filter((i) => i.status === "OPEN");
+  const totalReworks = job.stages.reduce((n, s) => n + s.reworks.length, 0);
   const admin = isAdmin(user);
 
   // Live idle indicator: in progress but nobody clocked on right now.
@@ -112,6 +117,11 @@ export default async function JobPage({
               <JobStatusBadge status={job.status} />
               {job.priority && <PriorityBadge />}
               {openIssues.length > 0 && <IssueBadge count={openIssues.length} />}
+              {totalReworks > 0 && (
+                <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap bg-purple-100 text-purple-800">
+                  {totalReworks} rework{totalReworks === 1 ? "" : "s"}
+                </span>
+              )}
               {idleSince && (
                 <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap bg-amber-100 text-amber-800">
                   Nobody working — idle <LiveDuration since={idleSince} />
@@ -432,12 +442,13 @@ export default async function JobPage({
 
               {/* Stage status controls */}
               <div className="flex flex-wrap gap-1.5">
-                {stage.status !== "ACTIVE" && job.status !== "COMPLETED" && (
+                {(stage.status === "PENDING" || stage.status === "PAUSED") &&
+                  job.status !== "COMPLETED" && (
                   <form action={setStageStatus}>
                     <input type="hidden" name="stageId" value={stage.id} />
                     <input type="hidden" name="status" value="ACTIVE" />
                     <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-blue-600 text-white active:bg-blue-700">
-                      {stage.status === "DONE" ? "Reopen" : "Start"}
+                      {stage.status === "PAUSED" ? "Resume" : "Start"}
                     </button>
                   </form>
                 )}
@@ -460,6 +471,45 @@ export default async function JobPage({
                   </>
                 )}
               </div>
+
+              {/* Rework: reason is compulsory; on a Done stage it also reopens */}
+              {stage.status !== "PENDING" && job.status !== "COMPLETED" && (
+                <details>
+                  <summary className="cursor-pointer text-sm font-medium text-purple-700 select-none">
+                    🔁 Rework{stage.status === "DONE" ? " (reopens stage)" : ""}
+                  </summary>
+                  <form action={recordRework} className="mt-1.5 space-y-1.5">
+                    <input type="hidden" name="stageId" value={stage.id} />
+                    <textarea
+                      name="reason"
+                      required
+                      rows={2}
+                      placeholder="Reason for rework (compulsory)"
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+                    />
+                    <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-purple-600 text-white active:bg-purple-700">
+                      Record rework
+                    </button>
+                  </form>
+                </details>
+              )}
+
+              {/* Rework history on this stage */}
+              {stage.reworks.length > 0 && (
+                <ul className="space-y-1">
+                  {stage.reworks.map((rw) => (
+                    <li
+                      key={rw.id}
+                      className="text-xs bg-purple-50 text-purple-900 rounded-lg px-2 py-1.5"
+                    >
+                      🔁 {rw.reason}
+                      <span className="text-purple-400">
+                        {" "}— {rw.raisedBy.name}, {formatDateTime(rw.createdAt)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           ))}
 
