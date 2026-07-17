@@ -1,11 +1,11 @@
 import { db } from "@/lib/db";
-import { requireRole } from "@/lib/permissions";
+import { requireUser } from "@/lib/permissions";
 import { JobCreateForm } from "@/components/job-create-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewJobPage() {
-  const user = await requireRole("ADMIN", "SUPERADMIN");
+  const user = await requireUser();
   const [units, templates] = await Promise.all([
     db.unit.findMany({
       where: user.role === "SUPERADMIN" ? {} : { id: { in: user.unitIds } },

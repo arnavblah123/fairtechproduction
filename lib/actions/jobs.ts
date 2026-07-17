@@ -12,12 +12,13 @@ import type { FormState } from "./auth";
 
 // Job creation (spec §4): client/buyer/PO/unit/description, template or
 // custom stages, mandatory expected completion date, optional save-as-template.
+// Supervisors may create jobs too (scoped to their units); editing client/
+// pricing details and completing jobs remain admin-only.
 export async function createJob(
   _prev: FormState,
   formData: FormData
 ): Promise<FormState> {
   const user = await requireUser();
-  if (!isAdmin(user)) return { error: "Only admins can create jobs." };
 
   const clientName = String(formData.get("clientName") ?? "").trim();
   const buyerName = String(formData.get("buyerName") ?? "").trim() || null;

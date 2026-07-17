@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireUser, unitScope, isAdmin } from "@/lib/permissions";
+import { requireUser, unitScope } from "@/lib/permissions";
 import { JobStatusBadge, IssueBadge, PriorityBadge } from "@/components/badges";
 import { formatDate, jobCode } from "@/lib/format";
 import type { JobStatus } from "@prisma/client";
@@ -39,14 +39,12 @@ export default async function JobsPage({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold">Jobs</h1>
-        {isAdmin(user) && (
-          <Link
-            href="/jobs/new"
-            className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700"
-          >
-            + New Job
-          </Link>
-        )}
+        <Link
+          href="/jobs/new"
+          className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700"
+        >
+          + New Job
+        </Link>
       </div>
 
       <form className="flex flex-wrap gap-2 bg-white rounded-xl shadow-sm p-3 text-sm">
