@@ -1,5 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import fs from "node:fs";
+import path from "node:path";
 
 const db = new PrismaClient();
 
@@ -52,28 +54,44 @@ async function main() {
     },
   });
 
-  // --- Sample employees ---
-  const employeeData = [
-    { name: "Ramesh Patil", code: "EMP001", skill: "Welder", unitId: ch1.id },
-    { name: "Suresh Kadam", code: "EMP002", skill: "Fitter", unitId: ch1.id },
-    { name: "Vijay Sharma", code: "EMP003", skill: "Helper", unitId: ch1.id },
-    { name: "Anil Jadhav", code: "EMP004", skill: "Welder", unitId: ch2.id },
-    { name: "Prakash More", code: "EMP005", skill: "Grinder", unitId: ch2.id },
-    { name: "Dinesh Rathva", code: "EMP006", skill: "Fitter", unitId: sv3.id },
-    { name: "Kiran Baria", code: "EMP007", skill: "Painter", unitId: sv3.id },
-  ];
-  for (const e of employeeData) {
-    await db.employee.upsert({
-      where: { code: e.code },
-      update: {},
-      create: {
-        name: e.name,
-        code: e.code,
-        skill: e.skill,
-        primaryUnitId: e.unitId,
-        transfers: { create: { toUnitId: e.unitId } },
-      },
+  // --- Real employees (prisma/import/employees.json, extracted from the
+  // unit muster registers). Idempotent: existing codes are left untouched,
+  // so renames/transfers made in the app are never overwritten.
+  const importFile = path.join(__dirname, "import", "employees.json");
+  if (fs.existsSync(importFile)) {
+    const roster: { code: string; name: string; skill: string; unitCode: string }[] =
+      JSON.parse(fs.readFileSync(importFile, "utf8"));
+    const unitByCode = new Map(units.map((u) => [u.code, u]));
+    let added = 0;
+    for (const e of roster) {
+      const unit = unitByCode.get(e.unitCode);
+      if (!unit) continue;
+      const existing = await db.employee.findUnique({ where: { code: e.code } });
+      if (existing) continue;
+      await db.employee.create({
+        data: {
+          name: e.name,
+          code: e.code,
+          skill: e.skill,
+          primaryUnitId: unit.id,
+          transfers: { create: { toUnitId: unit.id } },
+        },
+      });
+      added++;
+    }
+    console.log(`Employee import: ${added} added, ${roster.length - added} already present.`);
+  }
+
+  // Retire the old demo employees, but only if they were never used.
+  for (let i = 1; i <= 7; i++) {
+    const code = `EMP${String(i).padStart(3, "0")}`;
+    const demo = await db.employee.findUnique({
+      where: { code },
+      include: { _count: { select: { timeLogs: true } } },
     });
+    if (demo && demo.active && demo._count.timeLogs === 0) {
+      await db.employee.update({ where: { id: demo.id }, data: { active: false } });
+    }
   }
 
   // --- Templates ---

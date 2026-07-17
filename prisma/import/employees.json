@@ -1,0 +1,302 @@
+[
+  {
+    "code": "U1-01",
+    "name": "Atmaram D. Mahajan",
+    "skill": "Manager",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-02",
+    "name": "Jagdish Kalaskar",
+    "skill": "Purchase Mgr",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-03",
+    "name": "Rajguru Hrushikesh",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-04",
+    "name": "Hari Pillay",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-05",
+    "name": "Nirmal Singh",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-06",
+    "name": "Arjun Rajbhar",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-07",
+    "name": "Santosh Gore",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-08",
+    "name": "Mohammad Salmani",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-09",
+    "name": "Golu",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-10",
+    "name": "Dyaneshwar",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-11",
+    "name": "Sunil Yadav",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-12",
+    "name": "Swapnil Mehtar",
+    "skill": "Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-13",
+    "name": "Dipak Shankar Surve",
+    "skill": "Store Keeper",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-14",
+    "name": "Rakendra",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-15",
+    "name": "Chandresh Paswan(Shyam)",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-16",
+    "name": "Ghanshyam",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-17",
+    "name": "Aditya Kushwaha",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-18",
+    "name": "Vinod Shukla",
+    "skill": "Engineer",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-19",
+    "name": "Vijay Naik",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U1-20",
+    "name": "Avnish Vishvakarma",
+    "skill": "Semi Skilled",
+    "unitCode": "CH1"
+  },
+  {
+    "code": "U2-02",
+    "name": "Manish Mer",
+    "skill": "Engineer",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-03",
+    "name": "Santosh",
+    "skill": "Fitter",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-31",
+    "name": "Mukesh",
+    "skill": "Fitter",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-05",
+    "name": "Ajay Paswan",
+    "skill": "Fitter",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-06",
+    "name": "Ranjit Kumar",
+    "skill": "Fitter",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-08",
+    "name": "Natvarbhai",
+    "skill": "Operator",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-09",
+    "name": "Jamshed",
+    "skill": "Operator",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-10",
+    "name": "Dharmendra Kaka",
+    "skill": "Operator",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-11",
+    "name": "Dharmveer",
+    "skill": "Welder",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-50",
+    "name": "Abu Ansari",
+    "skill": "Welder",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-13",
+    "name": "Mandeep",
+    "skill": "Welder",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-14",
+    "name": "Vijay Kumar",
+    "skill": "Gas Cutter",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-15",
+    "name": "Ranjit Parmar",
+    "skill": "Expansion",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-16",
+    "name": "Jivan Parmar",
+    "skill": "Grinder Man",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-24",
+    "name": "Mukesh Kumar",
+    "skill": "Gas Cutter",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-25",
+    "name": "Suren",
+    "skill": "Helper",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-26",
+    "name": "Prem",
+    "skill": "Helper",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-27",
+    "name": "Golu Kumar",
+    "skill": "Helper",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-28",
+    "name": "Chandra Sihn",
+    "skill": "Grinder Man",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-34",
+    "name": "Ashokbhai Parmar",
+    "skill": "Operator",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-36",
+    "name": "Karan",
+    "skill": "Helper",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-37",
+    "name": "Avinash",
+    "skill": "Helper",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-51",
+    "name": "Sohail",
+    "skill": "Helper",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-52",
+    "name": "Chandan",
+    "skill": "Helper",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-53",
+    "name": "Sujeet",
+    "skill": "Helper",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-54",
+    "name": "Ajay Kumar",
+    "skill": "Helper",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-55",
+    "name": "Anuj",
+    "skill": "Helper",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-56",
+    "name": "Rakendra",
+    "skill": "Welder",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-57",
+    "name": "Manjulal Harijan",
+    "skill": "Sweeper",
+    "unitCode": "CH2"
+  },
+  {
+    "code": "U2-58",
+    "name": "Chiman Kaka",
+    "skill": "Security",
+    "unitCode": "CH2"
+  }
+]
