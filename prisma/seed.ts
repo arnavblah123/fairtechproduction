@@ -54,6 +54,38 @@ async function main() {
     },
   });
 
+  // --- One-time data patch (guarded by a Setting flag so it never reruns):
+  // the "U2" salary sheet was actually the Savli Unit-3 roster, so employees
+  // imported as U2-xx into Chinchwad Unit-2 belong in Savli Unit-3 as U3-xx.
+  const patchKey = "patch.2026-07-17.u2-roster-is-savli";
+  const patched = await db.setting.findUnique({ where: { key: patchKey } });
+  if (!patched) {
+    const misfiled = await db.employee.findMany({
+      where: { code: { startsWith: "U2-" }, primaryUnitId: ch2.id },
+    });
+    for (const emp of misfiled) {
+      await db.$transaction([
+        db.employee.update({
+          where: { id: emp.id },
+          data: {
+            code: emp.code.replace(/^U2-/, "U3-"),
+            primaryUnitId: sv3.id,
+          },
+        }),
+        // The unit was wrong from day one — correct the open membership
+        // record rather than logging a fake transfer.
+        db.unitTransfer.updateMany({
+          where: { employeeId: emp.id, toDate: null, toUnitId: ch2.id },
+          data: { toUnitId: sv3.id },
+        }),
+      ]);
+    }
+    await db.setting.create({ data: { key: patchKey, value: "done" } });
+    if (misfiled.length > 0) {
+      console.log(`Patch: moved ${misfiled.length} employees from Unit-2 to Savli Unit-3.`);
+    }
+  }
+
   // --- Real employees (prisma/import/employees.json, extracted from the
   // unit muster registers). Idempotent: existing codes are left untouched,
   // so renames/transfers made in the app are never overwritten.
