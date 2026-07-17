@@ -14,6 +14,9 @@ const STANDARD_TESTS = [
   "Hydro Test",
   "Kerosene / Leak Test",
   "UT Test",
+  "Dimension Inspection",
+  "Final Painting Inspection",
+  "Final Inspection",
 ];
 
 const inputCls =

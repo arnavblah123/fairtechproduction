@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, canAccessUnit, isAdmin } from "@/lib/permissions";
 import { setJobStatus, deleteJob } from "@/lib/actions/jobs";
-import { setStageStatus, assignWorker, stopWorker, addStage, recordRework } from "@/lib/actions/stages";
+import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework } from "@/lib/actions/stages";
 import { raiseIssue, resolveIssue } from "@/lib/actions/issues";
 import { addJobTest, deleteJobTest } from "@/lib/actions/tests";
 import {
@@ -106,7 +106,7 @@ export default async function JobPage({
   const isIdle = job.status === "IN_PROGRESS" && openLogCount === 0;
   const idleSince = isIdle
     ? job.timeLogs.find((l) => l.endedAt)?.endedAt ??
-      job.stages.find((s) => s.status === "ACTIVE")?.startedAt ??
+      job.stages.find((s) => s.status === "ACTIVE" || s.status === "REWORK")?.startedAt ??
       job.updatedAt
     : null;
 
@@ -320,6 +320,9 @@ export default async function JobPage({
               <option value="Hydro Test" />
               <option value="Kerosene / Leak Test" />
               <option value="UT Test" />
+              <option value="Dimension Inspection" />
+              <option value="Final Painting Inspection" />
+              <option value="Final Inspection" />
             </datalist>
             <select name="stageId" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
               <option value="">Final (whole job)</option>
@@ -393,6 +396,13 @@ export default async function JobPage({
       {/* Stage board */}
       <section>
         <h2 className="font-semibold mb-2 px-1">Stage Board</h2>
+        {/* Inspector suggestions for the quality-check field */}
+        <datalist id="inspectors">
+          <option value={user.name} />
+          {employees.map((e) => (
+            <option key={e.id} value={e.name} />
+          ))}
+        </datalist>
         {job.status !== "COMPLETED" && (
           <details className="mb-2">
             <summary className="cursor-pointer text-sm text-blue-700 font-medium px-1 py-1 select-none">
@@ -413,6 +423,8 @@ export default async function JobPage({
               className={`w-72 shrink-0 snap-start rounded-xl shadow-sm p-3 space-y-3 ${
                 stage.status === "ACTIVE"
                   ? "bg-blue-50 ring-2 ring-blue-200"
+                  : stage.status === "REWORK"
+                  ? "bg-purple-50 ring-2 ring-purple-300"
                   : stage.status === "DONE"
                   ? "bg-green-50"
                   : "bg-white"
@@ -425,6 +437,16 @@ export default async function JobPage({
                 </p>
                 <StageStatusBadge status={stage.status} />
               </div>
+
+              {/* What rework is going on — prominent while in rework */}
+              {stage.status === "REWORK" && stage.reworks[0] && (
+                <div className="rounded-lg bg-purple-100 border border-purple-200 px-2.5 py-2 text-sm text-purple-900">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-purple-500 mb-0.5">
+                    Rework going on
+                  </p>
+                  {stage.reworks[0].reason}
+                </div>
+              )}
 
               {/* Start / end time of this stage */}
               {stage.startedAt && (
@@ -532,25 +554,46 @@ export default async function JobPage({
                     </button>
                   </form>
                 )}
-                {stage.status === "ACTIVE" && (
-                  <>
-                    <form action={setStageStatus}>
-                      <input type="hidden" name="stageId" value={stage.id} />
-                      <input type="hidden" name="status" value="PAUSED" />
-                      <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-amber-500 text-white active:bg-amber-600">
-                        Pause
-                      </button>
-                    </form>
-                    <form action={setStageStatus}>
-                      <input type="hidden" name="stageId" value={stage.id} />
-                      <input type="hidden" name="status" value="DONE" />
-                      <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-green-600 text-white active:bg-green-700">
-                        Done
-                      </button>
-                    </form>
-                  </>
+                {(stage.status === "ACTIVE" || stage.status === "REWORK") && (
+                  <form action={setStageStatus}>
+                    <input type="hidden" name="stageId" value={stage.id} />
+                    <input type="hidden" name="status" value="PAUSED" />
+                    <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-amber-500 text-white active:bg-amber-600">
+                      Pause
+                    </button>
+                  </form>
                 )}
               </div>
+
+              {/* Done = quality check: inspector name is compulsory */}
+              {(stage.status === "ACTIVE" || stage.status === "REWORK") && (
+                <details>
+                  <summary className="cursor-pointer text-sm font-medium text-green-700 select-none">
+                    ✓ Mark Done (quality check)
+                  </summary>
+                  <form action={completeStage} className="mt-1.5 space-y-1.5">
+                    <input type="hidden" name="stageId" value={stage.id} />
+                    <input
+                      name="inspectedBy"
+                      required
+                      list="inspectors"
+                      placeholder="Inspected / checked by (compulsory)"
+                      className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+                    />
+                    <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-green-600 text-white active:bg-green-700">
+                      Confirm Done
+                    </button>
+                  </form>
+                </details>
+              )}
+
+              {/* Who inspected a finished stage */}
+              {stage.status === "DONE" && stage.inspectedBy && (
+                <p className="text-xs text-green-800 bg-green-100 rounded-lg px-2.5 py-1.5">
+                  ✓ Inspected by <b>{stage.inspectedBy}</b>
+                  {stage.inspectedAt && <> — {formatDateTime(stage.inspectedAt)}</>}
+                </p>
+              )}
 
               {/* Rework: reason is compulsory; on a Done stage it also reopens */}
               {stage.status !== "PENDING" && job.status !== "COMPLETED" && (

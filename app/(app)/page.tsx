@@ -73,7 +73,8 @@ export default async function DashboardPage({
   for (const job of idleJobs) {
     const ended = lastEnded.find((g) => g.jobId === job.id)?._max.endedAt;
     const fallback =
-      job.stages.find((s) => s.status === "ACTIVE")?.startedAt ?? job.updatedAt;
+      job.stages.find((s) => s.status === "ACTIVE" || s.status === "REWORK")?.startedAt ??
+      job.updatedAt;
     idleSince.set(job.id, ended ?? fallback);
   }
 
@@ -168,7 +169,9 @@ export default async function DashboardPage({
                     </p>
                   )}
                   {unitJobs.map((job) => {
-                    const activeStage = job.stages.find((s) => s.status === "ACTIVE");
+                    const activeStage = job.stages.find(
+                      (s) => s.status === "ACTIVE" || s.status === "REWORK"
+                    );
                     return (
                       <Link
                         key={job.id}

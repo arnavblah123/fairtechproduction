@@ -12,12 +12,15 @@ function revalidateJob(jobId: string) {
   revalidatePath("/");
 }
 
-// Start / pause / complete / reopen a stage. Reopening after Done is allowed
-// (spec: supervisors shift people back).
+// Start / pause / resume a stage. Completing goes through completeStage()
+// so the quality-check inspector is always recorded.
 export async function setStageStatus(formData: FormData) {
   const user = await requireUser();
   const stageId = String(formData.get("stageId") ?? "");
   const status = String(formData.get("status") ?? "") as StageStatus;
+  if (status === "DONE") {
+    throw new Error("Completing a stage requires the inspector's name.");
+  }
   const stage = await db.stage.findUniqueOrThrow({
     where: { id: stageId },
     include: { job: true },
@@ -30,12 +33,12 @@ export async function setStageStatus(formData: FormData) {
       data: {
         status,
         startedAt: status === "ACTIVE" && !stage.startedAt ? new Date() : stage.startedAt,
-        completedAt: status === "DONE" ? new Date() : null,
+        completedAt: null,
       },
     });
 
-    // Pausing or finishing a stage stops the clock for everyone on it.
-    if (status === "PAUSED" || status === "DONE" || status === "PENDING") {
+    // Pausing or resetting a stage stops the clock for everyone on it.
+    if (status === "PAUSED" || status === "PENDING") {
       const open = await tx.timeLog.findMany({ where: { stageId, endedAt: null } });
       for (const log of open) {
         await tx.timeLog.update({
@@ -136,9 +139,48 @@ export async function stopWorker(formData: FormData) {
   revalidatePath("/employees");
 }
 
-// Record rework on a stage. The reason is mandatory; recording rework on a
-// Done stage reopens it (this replaces the old bare "Reopen" button, so a
-// reason is always captured).
+// Complete a stage — the quality check. The name of whoever inspected/
+// checked the work is compulsory and stored on the stage.
+export async function completeStage(formData: FormData) {
+  const user = await requireUser();
+  const stageId = String(formData.get("stageId") ?? "");
+  const inspectedBy = String(formData.get("inspectedBy") ?? "").trim();
+  if (!inspectedBy) return;
+  const stage = await db.stage.findUniqueOrThrow({
+    where: { id: stageId },
+    include: { job: true },
+  });
+  assertUnitAccess(user, stage.job.unitId);
+  if (stage.job.status === "COMPLETED") return;
+
+  await db.$transaction(async (tx) => {
+    await tx.stage.update({
+      where: { id: stageId },
+      data: {
+        status: "DONE",
+        completedAt: new Date(),
+        inspectedBy,
+        inspectedAt: new Date(),
+      },
+    });
+    const open = await tx.timeLog.findMany({ where: { stageId, endedAt: null } });
+    for (const log of open) {
+      await tx.timeLog.update({
+        where: { id: log.id },
+        data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
+      });
+    }
+    await audit(user.id, "stage.done", "Stage", stageId, {
+      jobId: stage.jobId,
+      inspectedBy,
+    }, tx);
+  });
+  revalidateJob(stage.jobId);
+}
+
+// Record rework on a stage. The reason is mandatory; the stage moves to the
+// REWORK state (reopening it if it was Done) so the board shows what rework
+// is going on.
 export async function recordRework(formData: FormData) {
   const user = await requireUser();
   const stageId = String(formData.get("stageId") ?? "");
@@ -155,14 +197,16 @@ export async function recordRework(formData: FormData) {
     const rework = await tx.stageRework.create({
       data: { stageId, jobId: stage.jobId, reason, raisedById: user.id },
     });
-    if (stage.status === "DONE") {
-      await tx.stage.update({
-        where: { id: stageId },
-        data: { status: "ACTIVE", completedAt: null },
-      });
-      if (stage.job.status === "NOT_STARTED") {
-        await tx.job.update({ where: { id: stage.jobId }, data: { status: "IN_PROGRESS" } });
-      }
+    await tx.stage.update({
+      where: { id: stageId },
+      data: {
+        status: "REWORK",
+        completedAt: null,
+        startedAt: stage.startedAt ?? new Date(),
+      },
+    });
+    if (stage.job.status === "NOT_STARTED") {
+      await tx.job.update({ where: { id: stage.jobId }, data: { status: "IN_PROGRESS" } });
     }
     await audit(user.id, "stage.rework", "Stage", stageId, {
       jobId: stage.jobId,

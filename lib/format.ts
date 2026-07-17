@@ -42,6 +42,7 @@ export const STAGE_STATUS_LABELS: Record<string, string> = {
   PENDING: "Pending",
   ACTIVE: "Active",
   PAUSED: "Paused",
+  REWORK: "Rework",
   DONE: "Done",
 };
 

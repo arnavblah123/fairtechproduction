@@ -190,6 +190,7 @@ enum StageStatus {
   PENDING
   ACTIVE
   PAUSED
+  REWORK // rework in progress — the latest StageRework reason says what
   DONE
 }
 
@@ -203,6 +204,9 @@ model Stage {
   status      StageStatus @default(PENDING)
   startedAt   DateTime?
   completedAt DateTime?
+  // Quality check: who inspected the stage when it was marked Done.
+  inspectedBy String?
+  inspectedAt DateTime?
 
   timeLogs TimeLog[]
   reworks  StageRework[]

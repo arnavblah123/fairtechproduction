@@ -94,7 +94,7 @@ async function handleLogin(event: NormalizedAttendanceEvent): Promise<string> {
   if (!latest.endedAt) return "Already has an active assignment; nothing to do";
   if (latest.endSource !== "AUTO_ATTENDANCE")
     return "Last assignment was ended manually by a supervisor; not resuming";
-  if (latest.stage.status !== "ACTIVE")
+  if (latest.stage.status !== "ACTIVE" && latest.stage.status !== "REWORK")
     return `Previous stage "${latest.stage.name}" is no longer active; not resuming`;
   if (latest.job.status === "COMPLETED" || latest.job.status === "ON_HOLD")
     return `Job is ${latest.job.status.toLowerCase().replace("_", " ")}; not resuming`;

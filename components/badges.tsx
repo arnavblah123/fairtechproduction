@@ -15,6 +15,7 @@ const stageStatusStyles: Record<string, string> = {
   PENDING: "bg-slate-200 text-slate-700",
   ACTIVE: "bg-blue-100 text-blue-800",
   PAUSED: "bg-amber-100 text-amber-800",
+  REWORK: "bg-purple-100 text-purple-800",
   DONE: "bg-green-100 text-green-800",
 };
 
