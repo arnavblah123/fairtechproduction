@@ -98,6 +98,26 @@ export async function transferEmployee(formData: FormData) {
   revalidatePath("/employees");
 }
 
+// Map a worker to their enrollment number (PIN) in the biometric machine.
+export async function setBiometricId(formData: FormData) {
+  const user = await requireUser();
+  const employeeId = String(formData.get("employeeId") ?? "");
+  const biometricId = String(formData.get("biometricId") ?? "").trim() || null;
+  const employee = await db.employee.findUniqueOrThrow({ where: { id: employeeId } });
+  assertUnitAccess(user, employee.primaryUnitId);
+  if (biometricId) {
+    const clash = await db.employee.findUnique({ where: { biometricId } });
+    if (clash && clash.id !== employeeId) {
+      throw new Error(
+        `Bio #${biometricId} is already assigned to ${clash.name}. Each machine number maps to one worker.`
+      );
+    }
+  }
+  await db.employee.update({ where: { id: employeeId }, data: { biometricId } });
+  await audit(user.id, "employee.biometricId", "Employee", employeeId, { biometricId });
+  revalidatePath("/employees");
+}
+
 export async function setEmployeeActive(formData: FormData) {
   const user = await requireUser();
   if (!isAdmin(user)) throw new Error("Not allowed");

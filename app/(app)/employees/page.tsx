@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { requireUser, isAdmin } from "@/lib/permissions";
-import { transferEmployee, setEmployeeActive } from "@/lib/actions/employees";
+import { transferEmployee, setEmployeeActive, setBiometricId } from "@/lib/actions/employees";
 import { QuickAddEmployee } from "@/components/quick-add-employee";
 import { LiveDuration } from "@/components/live-duration";
 import { formatDate, jobCode } from "@/lib/format";
@@ -82,6 +82,7 @@ export default async function EmployeesPage({
             <tr className="text-left text-xs text-slate-500 border-b border-slate-100">
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Code</th>
+              <th className="px-4 py-3">Bio #</th>
               <th className="px-4 py-3">Skill</th>
               <th className="px-4 py-3">Unit</th>
               <th className="px-4 py-3">Working on now</th>
@@ -99,6 +100,21 @@ export default async function EmployeesPage({
                   )}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">{emp.code}</td>
+                <td className="px-4 py-3">
+                  <form action={setBiometricId} className="flex gap-1">
+                    <input type="hidden" name="employeeId" value={emp.id} />
+                    <input
+                      name="biometricId"
+                      defaultValue={emp.biometricId ?? ""}
+                      placeholder="—"
+                      className="w-14 rounded border border-slate-200 px-1.5 py-1 text-xs"
+                      title="Enrollment number in the biometric machine"
+                    />
+                    <button className="rounded bg-slate-100 px-1.5 py-1 text-xs" title="Save Bio #">
+                      ✓
+                    </button>
+                  </form>
+                </td>
                 <td className="px-4 py-3">{emp.skill}</td>
                 <td className="px-4 py-3 whitespace-nowrap">{emp.primaryUnit.name}</td>
                 <td className="px-4 py-3">
@@ -159,7 +175,7 @@ export default async function EmployeesPage({
             ))}
             {employees.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
                   No employees found.
                 </td>
               </tr>

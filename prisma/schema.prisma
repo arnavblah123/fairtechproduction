@@ -69,7 +69,8 @@ model Unit {
 model Employee {
   id            String  @id @default(cuid())
   name          String
-  code          String  @unique // employee code, also the key used by the attendance system
+  code          String  @unique // employee code
+  biometricId   String? @unique // enrollment number (PIN) in the biometric machine
   skill         String // welder, fitter, helper, ...
   contact       String?
   primaryUnitId String
