@@ -51,6 +51,10 @@ export async function quickAddEmployee(
     unitId,
   });
   revalidatePath("/employees");
+  // Quick-add can be embedded on other pages (e.g. a job page) — refresh
+  // that page too so the new worker appears in its dropdowns immediately.
+  const alsoRevalidate = String(formData.get("alsoRevalidate") ?? "");
+  if (alsoRevalidate.startsWith("/")) revalidatePath(alsoRevalidate);
   return undefined;
 }
 

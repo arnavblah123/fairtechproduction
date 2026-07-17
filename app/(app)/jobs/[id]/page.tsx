@@ -15,6 +15,7 @@ import { LiveDuration } from "@/components/live-duration";
 import { formatDate, formatDateTime, formatDuration, jobCode } from "@/lib/format";
 import { googleCalendarLink, isCalendarConfigured } from "@/lib/google-calendar";
 import { AttachmentUpload } from "@/components/attachment-upload";
+import { QuickAddEmployee } from "@/components/quick-add-employee";
 import { deleteAttachment } from "@/lib/actions/attachments";
 import { ATTACHMENT_KIND_LABELS, formatFileSize } from "@/lib/attachments";
 
@@ -70,11 +71,22 @@ export default async function JobPage({
   });
   if (!job || !canAccessUnit(user, job.unitId)) notFound();
 
-  // Workers available for assignment: active employees currently in this unit.
+  // Workers available for assignment: the pool is shared — any active worker
+  // from any unit can be put on this job. Grouped with this job's unit first.
   const employees = await db.employee.findMany({
-    where: { primaryUnitId: job.unitId, active: true },
+    where: { active: true },
+    include: { primaryUnit: true },
     orderBy: { name: "asc" },
   });
+  const workerGroups = [
+    { label: `${job.unit.name} (this unit)`, list: employees.filter((e) => e.primaryUnitId === job.unitId) },
+    ...[...new Set(employees.filter((e) => e.primaryUnitId !== job.unitId).map((e) => e.primaryUnit.name))].map(
+      (unitName) => ({
+        label: unitName,
+        list: employees.filter((e) => e.primaryUnit.name === unitName),
+      })
+    ),
+  ].filter((g) => g.list.length > 0);
 
   const openIssues = job.issues.filter((i) => i.status === "OPEN");
   const admin = isAdmin(user);
@@ -307,6 +319,19 @@ export default async function JobPage({
       {/* Stage board */}
       <section>
         <h2 className="font-semibold mb-2 px-1">Stage Board</h2>
+        {job.status !== "COMPLETED" && (
+          <details className="mb-2">
+            <summary className="cursor-pointer text-sm text-blue-700 font-medium px-1 py-1 select-none">
+              + New worker not in the list? Add here
+            </summary>
+            <div className="mt-1">
+              <QuickAddEmployee
+                units={[{ id: job.unit.id, name: job.unit.name }]}
+                alsoRevalidate={`/jobs/${job.id}`}
+              />
+            </div>
+          </details>
+        )}
         <div className="flex gap-3 overflow-x-auto pb-2 snap-x">
           {job.stages.map((stage) => (
             <div
@@ -389,10 +414,14 @@ export default async function JobPage({
                     <option value="" disabled>
                       Assign worker…
                     </option>
-                    {employees.map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.name} ({e.skill})
-                      </option>
+                    {workerGroups.map((g) => (
+                      <optgroup key={g.label} label={g.label}>
+                        {g.list.map((e) => (
+                          <option key={e.id} value={e.id}>
+                            {e.name} ({e.skill})
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                   <button className="rounded-lg bg-blue-600 text-white px-3.5 py-1.5 text-sm active:bg-blue-700">

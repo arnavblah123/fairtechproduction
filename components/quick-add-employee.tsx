@@ -6,8 +6,10 @@ import { quickAddEmployee } from "@/lib/actions/employees";
 // Fast 30-second add: name, skill, unit, contact. Code auto-generates.
 export function QuickAddEmployee({
   units,
+  alsoRevalidate,
 }: {
   units: { id: string; name: string }[];
+  alsoRevalidate?: string; // extra path to refresh (e.g. the job page hosting the form)
 }) {
   const [state, action, pending] = useActionState(quickAddEmployee, undefined);
   const formRef = useRef<HTMLFormElement>(null);
@@ -22,6 +24,9 @@ export function QuickAddEmployee({
       action={action}
       className="bg-white rounded-xl shadow-sm p-3 flex flex-wrap gap-2 items-center"
     >
+      {alsoRevalidate && (
+        <input type="hidden" name="alsoRevalidate" value={alsoRevalidate} />
+      )}
       <span className="text-sm font-semibold mr-1">Quick add:</span>
       <input
         name="name"
