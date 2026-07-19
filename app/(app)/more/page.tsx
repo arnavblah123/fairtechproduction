@@ -12,6 +12,7 @@ export default async function MorePage() {
 
   const links = [
     { href: "/history", label: "Completed Job History", icon: "📊" },
+    { href: "/discipline", label: "Discipline Register", icon: "⚠️" },
     ...(isAdmin ? [{ href: "/templates", label: "Process Templates", icon: "📋" }] : []),
     ...(isAdmin ? [{ href: "/users", label: "Users", icon: "👤" }] : []),
     { href: "/attendance", label: "Attendance Events", icon: "🕐" },

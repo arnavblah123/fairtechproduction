@@ -38,6 +38,7 @@ model User {
   auditLogs      AuditLog[]
   attachments    JobAttachment[] @relation("AttachmentUploadedBy")
   reworks        StageRework[]   @relation("ReworkRaisedBy")
+  disciplines    Discipline[]    @relation("DisciplineRaisedBy")
 }
 
 model UserUnit {
@@ -64,6 +65,7 @@ model Unit {
   issues    Issue[]
   transfersIn  UnitTransfer[] @relation("TransferTo")
   transfersOut UnitTransfer[] @relation("TransferFrom")
+  disciplines  Discipline[]
 }
 
 model Employee {
@@ -79,8 +81,9 @@ model Employee {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  transfers UnitTransfer[]
-  timeLogs  TimeLog[]
+  transfers   UnitTransfer[]
+  timeLogs    TimeLog[]
+  disciplines Discipline[]
 }
 
 // Log of unit membership over time. The open row (toDate = null) is the current unit.
@@ -320,6 +323,32 @@ model Issue {
 
   @@index([unitId, status])
   @@index([jobId, status])
+}
+
+// ---------- Discipline (hour cuts) ----------
+
+enum DisciplineReason {
+  DRINKING // 16 hours
+  TIMEPASS // 8 hours
+  TOBACCO // tobacco / cigarette — 4 hours
+  OTHER // custom hours, note required
+}
+
+model Discipline {
+  id         String           @id @default(cuid())
+  employeeId String
+  employee   Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  unitId     String
+  unit       Unit             @relation(fields: [unitId], references: [id])
+  reason     DisciplineReason
+  hoursCut   Float
+  note       String?
+  raisedById String
+  raisedBy   User             @relation("DisciplineRaisedBy", fields: [raisedById], references: [id])
+  createdAt  DateTime         @default(now())
+
+  @@index([employeeId, createdAt])
+  @@index([unitId, createdAt])
 }
 
 // ---------- Audit ----------

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { requireUser, isAdmin } from "@/lib/permissions";
 import { transferEmployee, setEmployeeActive, setBiometricId } from "@/lib/actions/employees";
 import { QuickAddEmployee } from "@/components/quick-add-employee";
+import { DisciplineForm } from "@/components/discipline-form";
 import { LiveDuration } from "@/components/live-duration";
 import { formatDate, jobCode, ACTIVITY_LABELS } from "@/lib/format";
 
@@ -45,6 +46,12 @@ export default async function EmployeesPage({
         where: { endedAt: null },
         include: { stage: true, job: true },
       },
+      disciplines: {
+        where: {
+          createdAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
+        },
+        select: { hoursCut: true },
+      },
     },
     orderBy: { name: "asc" },
   });
@@ -86,6 +93,7 @@ export default async function EmployeesPage({
               <th className="px-4 py-3">Skill</th>
               <th className="px-4 py-3">Unit</th>
               <th className="px-4 py-3">Working on now</th>
+              <th className="px-4 py-3">Discipline</th>
               <th className="px-4 py-3">Transfer history</th>
               <th className="px-4 py-3">Actions</th>
             </tr>
@@ -143,6 +151,14 @@ export default async function EmployeesPage({
                     <span className="text-slate-300">—</span>
                   )}
                 </td>
+                <td className="px-4 py-3">
+                  {emp.disciplines.length > 0 && (
+                    <p className="text-xs text-red-700 font-medium mb-1 whitespace-nowrap">
+                      {emp.disciplines.reduce((s, d) => s + d.hoursCut, 0)}h cut this month
+                    </p>
+                  )}
+                  <DisciplineForm employeeId={emp.id} />
+                </td>
                 <td className="px-4 py-3 text-xs text-slate-500">
                   {emp.transfers.slice(0, 3).map((t) => (
                     <p key={t.id} className="whitespace-nowrap">
@@ -186,7 +202,7 @@ export default async function EmployeesPage({
             ))}
             {employees.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                   No employees found.
                 </td>
               </tr>
