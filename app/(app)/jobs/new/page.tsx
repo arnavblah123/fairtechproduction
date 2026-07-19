@@ -38,6 +38,7 @@ export default async function NewJobPage() {
         templates={templates.map((t) => ({
           id: t.id,
           name: t.name,
+          equipmentName: t.equipmentName,
           stageNames: t.stages.map((s) => s.name),
         }))}
         clientNames={clients.map((c) => c.clientName)}

@@ -43,6 +43,13 @@ export default async function TemplatesPage() {
                 {t._count.jobs} job{t._count.jobs === 1 ? "" : "s"}
               </span>
             </div>
+            {t.equipmentName && (
+              <p className="text-xs mt-1">
+                <span className="inline-flex rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 font-medium">
+                  For: {t.equipmentName}
+                </span>
+              </p>
+            )}
             {t.description && <p className="text-sm text-slate-500 mt-1">{t.description}</p>}
             <ol className="mt-3 text-sm text-slate-600 list-decimal list-inside space-y-0.5">
               {t.stages.map((s) => (

@@ -107,6 +107,9 @@ export async function createJob(
       const newTemplate = await tx.jobTemplate.create({
         data: {
           name: saveAsTemplate,
+          // Remember which equipment this process is for, so typing the same
+          // description next time auto-selects this template.
+          equipmentName: description,
           stages: {
             create: stages.map((s, i) => ({ ...s, sequence: i + 1 })),
           },

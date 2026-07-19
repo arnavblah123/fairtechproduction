@@ -176,9 +176,10 @@ async function main() {
   // --- Templates ---
   const tankTemplate = await db.jobTemplate.upsert({
     where: { name: "Transformer Tank Fabrication — Standard Process" },
-    update: {},
+    update: { equipmentName: "Transformer Tank" },
     create: {
       name: "Transformer Tank Fabrication — Standard Process",
+      equipmentName: "Transformer Tank",
       description: "Standard stage sequence for transformer tanks",
       stages: {
         create: [
@@ -197,9 +198,10 @@ async function main() {
   });
   await db.jobTemplate.upsert({
     where: { name: "Pressure Vessel — Standard Process" },
-    update: {},
+    update: { equipmentName: "Pressure Vessel" },
     create: {
       name: "Pressure Vessel — Standard Process",
+      equipmentName: "Pressure Vessel",
       description: "Standard stage sequence for pressure vessels",
       stages: {
         create: [

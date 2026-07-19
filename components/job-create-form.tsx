@@ -1,11 +1,16 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { createJob } from "@/lib/actions/jobs";
 
 type Props = {
   units: { id: string; name: string }[];
-  templates: { id: string; name: string; stageNames: string[] }[];
+  templates: {
+    id: string;
+    name: string;
+    equipmentName: string | null;
+    stageNames: string[];
+  }[];
   clientNames: string[];
   buyerNames: string[];
 };
@@ -29,6 +34,9 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames }: Pro
   const [state, action, pending] = useActionState(createJob, undefined);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [stagesText, setStagesText] = useState("");
+  const [autoMatched, setAutoMatched] = useState<string | null>(null);
+  // Remember the last auto/template fill so we never overwrite manual edits.
+  const lastApplied = useRef("");
 
   const stageLines = stagesText
     .split("\n")
@@ -38,7 +46,24 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames }: Pro
   function applyTemplate(id: string) {
     setSelectedTemplate(id);
     const t = templates.find((x) => x.id === id);
-    if (t) setStagesText(t.stageNames.join("\n"));
+    if (t) {
+      const text = t.stageNames.join("\n");
+      setStagesText(text);
+      lastApplied.current = text;
+    }
+  }
+
+  // Typing a known equipment name in the description auto-selects its
+  // template — but only while the stage box hasn't been edited by hand.
+  function onDescriptionChange(value: string) {
+    const lower = value.toLowerCase();
+    const match = templates
+      .filter((t) => t.equipmentName && lower.includes(t.equipmentName.toLowerCase()))
+      .sort((a, b) => (b.equipmentName!.length - a.equipmentName!.length))[0];
+    if (!match || match.id === selectedTemplate) return;
+    if (stagesText !== "" && stagesText !== lastApplied.current) return;
+    applyTemplate(match.id);
+    setAutoMatched(match.name);
   }
 
   // Stage picker for a test: which stage the test happens after.
@@ -103,9 +128,21 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames }: Pro
         <input
           name="description"
           required
+          list="equipment-names"
+          onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder="e.g. Transformer Tank, APH, Bag Filter, Pressure Vessel"
           className={inputCls}
         />
+        <datalist id="equipment-names">
+          {[...new Set(templates.map((t) => t.equipmentName).filter(Boolean))].map((n) => (
+            <option key={n!} value={n!} />
+          ))}
+        </datalist>
+        {autoMatched && (
+          <p className="text-xs text-green-700 mt-1">
+            ✓ Process template applied automatically: {autoMatched}
+          </p>
+        )}
       </div>
 
       {/* Drawings & BOM */}

@@ -19,6 +19,7 @@ export async function saveTemplate(
 
   const templateId = String(formData.get("templateId") ?? "") || null;
   const name = String(formData.get("name") ?? "").trim();
+  const equipmentName = String(formData.get("equipmentName") ?? "").trim() || null;
   const description = String(formData.get("description") ?? "").trim() || null;
   const stagesRaw = String(formData.get("stages") ?? "");
 
@@ -43,13 +44,13 @@ export async function saveTemplate(
       await tx.templateStage.deleteMany({ where: { templateId } });
       await tx.jobTemplate.update({
         where: { id: templateId },
-        data: { name, description, stages: { create: stages } },
+        data: { name, equipmentName, description, stages: { create: stages } },
       });
       await audit(user.id, "template.update", "JobTemplate", templateId, { name }, tx);
     });
   } else {
     const created = await db.jobTemplate.create({
-      data: { name, description, stages: { create: stages } },
+      data: { name, equipmentName, description, stages: { create: stages } },
     });
     await audit(user.id, "template.create", "JobTemplate", created.id, { name });
   }

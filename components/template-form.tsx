@@ -8,6 +8,7 @@ type Props = {
   template: {
     id: string;
     name: string;
+    equipmentName: string;
     description: string;
     stagesText: string;
   } | null;
@@ -31,6 +32,15 @@ export function TemplateForm({ template }: Props) {
           required
           defaultValue={template?.name}
           placeholder='e.g. "Transformer Tank Fabrication — Standard Process"'
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <label className={labelCls}>Job / equipment name this process is for</label>
+        <input
+          name="equipmentName"
+          defaultValue={template?.equipmentName}
+          placeholder='e.g. "Transformer Tank" — typing this in a new job auto-selects this template'
           className={inputCls}
         />
       </div>

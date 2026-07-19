@@ -29,6 +29,7 @@ export default async function TemplateEditPage({
             ? {
                 id: template.id,
                 name: template.name,
+                equipmentName: template.equipmentName ?? "",
                 description: template.description ?? "",
                 stagesText: template.stages
                   .map((s) => (s.description ? `${s.name} | ${s.description}` : s.name))

@@ -104,9 +104,12 @@ model UnitTransfer {
 // ---------- Process library ----------
 
 model JobTemplate {
-  id          String          @id @default(cuid())
-  name        String          @unique
-  description String?
+  id            String        @id @default(cuid())
+  name          String        @unique
+  // Job/equipment name this process belongs to (e.g. "Transformer Tank").
+  // Typing it in a new job's description auto-selects this template.
+  equipmentName String?
+  description   String?
   active      Boolean         @default(true)
   stages      TemplateStage[]
   jobs        Job[]
