@@ -94,14 +94,20 @@ async function handleLogin(event: NormalizedAttendanceEvent): Promise<string> {
   if (!latest.endedAt) return "Already has an active assignment; nothing to do";
   if (latest.endSource !== "AUTO_ATTENDANCE")
     return "Last assignment was ended manually by a supervisor; not resuming";
-  if (latest.stage.status !== "ACTIVE" && latest.stage.status !== "REWORK")
-    return `Previous stage "${latest.stage.name}" is no longer active; not resuming`;
-  if (latest.job.status === "COMPLETED" || latest.job.status === "ON_HOLD")
-    return `Job is ${latest.job.status.toLowerCase().replace("_", " ")}; not resuming`;
+  // Stage work needs the stage/job still to be running; general duties
+  // (material handling / dispatch) can always resume.
+  if (latest.activity === "STAGE") {
+    if (!latest.stage || !latest.job) return "Previous work no longer exists; not resuming";
+    if (latest.stage.status !== "ACTIVE" && latest.stage.status !== "REWORK")
+      return `Previous stage "${latest.stage.name}" is no longer active; not resuming`;
+    if (latest.job.status === "COMPLETED" || latest.job.status === "ON_HOLD")
+      return `Job is ${latest.job.status.toLowerCase().replace("_", " ")}; not resuming`;
+  }
 
   const newLog = await db.timeLog.create({
     data: {
       employeeId: employee.id,
+      activity: latest.activity,
       jobId: latest.jobId,
       stageId: latest.stageId,
       unitId: latest.unitId,
@@ -112,9 +118,12 @@ async function handleLogin(event: NormalizedAttendanceEvent): Promise<string> {
   await audit(null, "timelog.autoResume", "TimeLog", newLog.id, {
     employeeId: employee.id,
     employeeCode: employee.code,
+    activity: latest.activity,
     stageId: latest.stageId,
     jobId: latest.jobId,
     reason: "attendance login",
   });
-  return `Auto-resumed on "${latest.stage.name}" (${latest.job.clientName})`;
+  return latest.activity === "STAGE"
+    ? `Auto-resumed on "${latest.stage!.name}" (${latest.job!.clientName})`
+    : `Auto-resumed on ${latest.activity === "MATERIAL_HANDLING" ? "material handling" : "dispatch"}`;
 }

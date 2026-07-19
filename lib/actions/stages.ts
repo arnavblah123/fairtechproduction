@@ -120,22 +120,63 @@ export async function assignWorker(formData: FormData) {
   revalidatePath("/employees");
 }
 
-// Stop one worker's clock on a stage without touching the stage status.
+// Stop one worker's clock (stage work or general duty) without touching
+// the stage status.
 export async function stopWorker(formData: FormData) {
   const user = await requireUser();
   const timeLogId = String(formData.get("timeLogId") ?? "");
-  const log = await db.timeLog.findUniqueOrThrow({
-    where: { id: timeLogId },
-    include: { job: true },
-  });
-  assertUnitAccess(user, log.job.unitId);
+  const log = await db.timeLog.findUniqueOrThrow({ where: { id: timeLogId } });
+  assertUnitAccess(user, log.unitId);
   if (log.endedAt) return;
   await db.timeLog.update({
     where: { id: timeLogId },
     data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
   });
   await audit(user.id, "timelog.stop", "TimeLog", timeLogId, { reason: "manual stop" });
-  revalidateJob(log.jobId);
+  if (log.jobId) revalidateJob(log.jobId);
+  revalidatePath("/");
+  revalidatePath("/employees");
+}
+
+// Put a worker on a general duty — material handling or dispatch — for a
+// unit. Works exactly like a stage assignment: any open clock is closed
+// first, and the new clock runs until stopped or the worker punches out.
+export async function assignGeneralDuty(formData: FormData) {
+  const user = await requireUser();
+  const unitId = String(formData.get("unitId") ?? "");
+  const employeeId = String(formData.get("employeeId") ?? "");
+  const activity = String(formData.get("activity") ?? "") as "MATERIAL_HANDLING" | "DISPATCH";
+  if (!employeeId || !["MATERIAL_HANDLING", "DISPATCH"].includes(activity)) return;
+  assertUnitAccess(user, unitId);
+  const employee = await db.employee.findUniqueOrThrow({ where: { id: employeeId } });
+
+  await db.$transaction(async (tx) => {
+    const open = await tx.timeLog.findMany({ where: { employeeId, endedAt: null } });
+    if (open.some((l) => l.activity === activity && l.unitId === unitId)) return;
+    for (const log of open) {
+      await tx.timeLog.update({
+        where: { id: log.id },
+        data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
+      });
+      await audit(user.id, "timelog.stop", "TimeLog", log.id, { reason: "reassigned to general duty" }, tx);
+    }
+    const newLog = await tx.timeLog.create({
+      data: {
+        employeeId,
+        unitId,
+        activity,
+        startSource: "MANUAL",
+        startedById: user.id,
+      },
+    });
+    await audit(user.id, "timelog.assignDuty", "TimeLog", newLog.id, {
+      employeeId,
+      employeeCode: employee.code,
+      activity,
+      unitId,
+    }, tx);
+  });
+  revalidatePath("/");
   revalidatePath("/employees");
 }
 

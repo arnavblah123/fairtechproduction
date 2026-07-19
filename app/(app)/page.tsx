@@ -7,7 +7,8 @@ import {
   PriorityBadge,
 } from "@/components/badges";
 import { LiveDuration } from "@/components/live-duration";
-import { formatDate, formatDateTime, jobCode } from "@/lib/format";
+import { formatDate, formatDateTime, jobCode, ACTIVITY_LABELS } from "@/lib/format";
+import { assignGeneralDuty, stopWorker } from "@/lib/actions/stages";
 import type { JobStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -52,9 +53,28 @@ export default async function DashboardPage({
     orderBy: [{ priority: "desc" }, { expectedCompletion: "asc" }],
   });
 
-  const activeWorkerCount = new Set(
-    jobs.flatMap((j) => j.timeLogs.map((t) => t.employeeId))
-  ).size;
+  // Workers currently on general duties (material handling / dispatch).
+  const [dutyLogs, unitWorkers] = await Promise.all([
+    db.timeLog.findMany({
+      where: {
+        endedAt: null,
+        activity: { in: ["MATERIAL_HANDLING", "DISPATCH"] },
+        unitId: { in: units.map((u) => u.id) },
+      },
+      include: { employee: true },
+      orderBy: { startedAt: "asc" },
+    }),
+    db.employee.findMany({
+      where: { active: true, primaryUnitId: { in: units.map((u) => u.id) } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, skill: true, primaryUnitId: true },
+    }),
+  ]);
+
+  const activeWorkerCount = new Set([
+    ...jobs.flatMap((j) => j.timeLogs.map((t) => t.employeeId)),
+    ...dutyLogs.map((l) => l.employeeId),
+  ]).size;
   const openIssueCount = jobs.reduce((n, j) => n + j.issues.length, 0);
 
   // Jobs in progress with nobody clocked on = idle right now. "Since" is the
@@ -227,7 +247,7 @@ export default async function DashboardPage({
                                 <span>
                                   {log.employee.name}{" "}
                                   <span className="text-blue-600">
-                                    on {log.stage.name}
+                                    on {log.stage?.name ?? "—"}
                                   </span>
                                 </span>
                                 <span className="font-medium">
@@ -240,6 +260,69 @@ export default async function DashboardPage({
                       </Link>
                     );
                   })}
+                </div>
+
+                {/* General duties: material handling / dispatch */}
+                <div className="border-t border-slate-100 px-4 py-3 space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    General duties
+                  </p>
+                  {dutyLogs
+                    .filter((l) => l.unitId === unit.id)
+                    .map((log) => (
+                      <div
+                        key={log.id}
+                        className="flex items-center justify-between text-xs bg-teal-50 text-teal-900 rounded px-2 py-1"
+                      >
+                        <span>
+                          {log.employee.name}{" "}
+                          <span className="text-teal-600">
+                            on {ACTIVITY_LABELS[log.activity] ?? log.activity}
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <span className="font-medium">
+                            <LiveDuration since={log.startedAt} />
+                          </span>
+                          <form action={stopWorker}>
+                            <input type="hidden" name="timeLogId" value={log.id} />
+                            <button className="text-red-600 hover:underline" title="Stop">
+                              Stop
+                            </button>
+                          </form>
+                        </span>
+                      </div>
+                    ))}
+                  <form action={assignGeneralDuty} className="flex gap-1.5">
+                    <input type="hidden" name="unitId" value={unit.id} />
+                    <select
+                      name="employeeId"
+                      required
+                      defaultValue=""
+                      className="flex-1 min-w-0 rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                    >
+                      <option value="" disabled>
+                        Put worker on…
+                      </option>
+                      {unitWorkers
+                        .filter((w) => w.primaryUnitId === unit.id)
+                        .map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.name} ({w.skill})
+                          </option>
+                        ))}
+                    </select>
+                    <select
+                      name="activity"
+                      className="rounded-lg border border-slate-300 px-1.5 py-1.5 text-xs"
+                    >
+                      <option value="MATERIAL_HANDLING">Material Handling</option>
+                      <option value="DISPATCH">Dispatch</option>
+                    </select>
+                    <button className="rounded-lg bg-teal-600 text-white px-2.5 text-xs">
+                      Go
+                    </button>
+                  </form>
                 </div>
               </section>
             );

@@ -52,6 +52,11 @@ export const ISSUE_TYPE_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
+export const ACTIVITY_LABELS: Record<string, string> = {
+  MATERIAL_HANDLING: "🚚 Material Handling",
+  DISPATCH: "📦 Dispatch",
+};
+
 export function jobCode(jobNumber: number): string {
   return `JOB-${String(jobNumber).padStart(4, "0")}`;
 }

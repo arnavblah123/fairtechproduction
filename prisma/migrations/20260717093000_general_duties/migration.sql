@@ -1,0 +1,7 @@
+-- CreateEnum
+CREATE TYPE "WorkActivity" AS ENUM ('STAGE', 'MATERIAL_HANDLING', 'DISPATCH');
+
+-- AlterTable
+ALTER TABLE "TimeLog" ADD COLUMN "activity" "WorkActivity" NOT NULL DEFAULT 'STAGE';
+ALTER TABLE "TimeLog" ALTER COLUMN "jobId" DROP NOT NULL;
+ALTER TABLE "TimeLog" ALTER COLUMN "stageId" DROP NOT NULL;

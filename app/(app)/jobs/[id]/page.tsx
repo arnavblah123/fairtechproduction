@@ -676,7 +676,7 @@ export default async function JobPage({
               {job.timeLogs.map((log) => (
                 <tr key={log.id}>
                   <td className="px-2 py-2 whitespace-nowrap">{log.employee.name}</td>
-                  <td className="px-2 py-2">{log.stage.name}</td>
+                  <td className="px-2 py-2">{log.stage?.name ?? "—"}</td>
                   <td className="px-2 py-2 whitespace-nowrap">{formatDateTime(log.startedAt)}</td>
                   <td className="px-2 py-2 whitespace-nowrap">
                     {log.endedAt ? (

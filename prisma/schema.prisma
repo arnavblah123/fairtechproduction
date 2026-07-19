@@ -256,14 +256,23 @@ enum LogSource {
   AUTO_ATTENDANCE // attendance system login/logout event
 }
 
+// What the worker is engaged in: production stage work, or general duties
+// (material handling / dispatch) that aren't tied to a job stage.
+enum WorkActivity {
+  STAGE
+  MATERIAL_HANDLING
+  DISPATCH
+}
+
 model TimeLog {
   id          String     @id @default(cuid())
   employeeId  String
   employee    Employee   @relation(fields: [employeeId], references: [id])
-  jobId       String
-  job         Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  stageId     String
-  stage       Stage      @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  activity    WorkActivity @default(STAGE)
+  jobId       String? // null for general duties
+  job         Job?       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  stageId     String? // null for general duties
+  stage       Stage?     @relation(fields: [stageId], references: [id], onDelete: Cascade)
   unitId      String
   unit        Unit       @relation(fields: [unitId], references: [id])
   startedAt   DateTime   @default(now())

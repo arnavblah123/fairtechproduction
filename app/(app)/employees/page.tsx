@@ -3,7 +3,7 @@ import { requireUser, isAdmin } from "@/lib/permissions";
 import { transferEmployee, setEmployeeActive, setBiometricId } from "@/lib/actions/employees";
 import { QuickAddEmployee } from "@/components/quick-add-employee";
 import { LiveDuration } from "@/components/live-duration";
-import { formatDate, jobCode } from "@/lib/format";
+import { formatDate, jobCode, ACTIVITY_LABELS } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -121,11 +121,22 @@ export default async function EmployeesPage({
                   {emp.timeLogs.length > 0 ? (
                     emp.timeLogs.map((log) => (
                       <p key={log.id} className="text-blue-800 whitespace-nowrap">
-                        {log.stage.name}
-                        <span className="text-slate-400">
-                          {" "}· {jobCode(log.job.jobNumber)} ({log.job.clientName}) ·{" "}
-                          <LiveDuration since={log.startedAt} />
-                        </span>
+                        {log.stage && log.job ? (
+                          <>
+                            {log.stage.name}
+                            <span className="text-slate-400">
+                              {" "}· {jobCode(log.job.jobNumber)} ({log.job.clientName}) ·{" "}
+                              <LiveDuration since={log.startedAt} />
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            {ACTIVITY_LABELS[log.activity] ?? log.activity}
+                            <span className="text-slate-400">
+                              {" "}· <LiveDuration since={log.startedAt} />
+                            </span>
+                          </>
+                        )}
                       </p>
                     ))
                   ) : (
