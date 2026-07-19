@@ -9,6 +9,7 @@ import {
 import { LiveDuration } from "@/components/live-duration";
 import { formatDate, formatDateTime, jobCode, ACTIVITY_LABELS } from "@/lib/format";
 import { assignGeneralDuty, stopWorker } from "@/lib/actions/stages";
+import { startCrane, stopCrane } from "@/lib/actions/crane";
 import type { JobStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -53,15 +54,19 @@ export default async function DashboardPage({
     orderBy: [{ priority: "desc" }, { expectedCompletion: "asc" }],
   });
 
-  // Workers currently on general duties (material handling / dispatch).
-  const [dutyLogs, unitWorkers] = await Promise.all([
+  // Workers currently on general duties, plus running outside-crane clocks.
+  const [dutyLogs, craneLogs, unitWorkers] = await Promise.all([
     db.timeLog.findMany({
       where: {
         endedAt: null,
-        activity: { in: ["MATERIAL_HANDLING", "DISPATCH"] },
+        activity: { not: "STAGE" },
         unitId: { in: units.map((u) => u.id) },
       },
       include: { employee: true },
+      orderBy: { startedAt: "asc" },
+    }),
+    db.craneLog.findMany({
+      where: { endedAt: null, unitId: { in: units.map((u) => u.id) } },
       orderBy: { startedAt: "asc" },
     }),
     db.employee.findMany({
@@ -318,11 +323,63 @@ export default async function DashboardPage({
                     >
                       <option value="MATERIAL_HANDLING">Material Handling</option>
                       <option value="DISPATCH">Dispatch</option>
+                      <option value="PLATE_CUTTING">Plate Cutting</option>
+                      <option value="STRUCTURAL_CUTTING">Structural Cutting</option>
                     </select>
                     <button className="rounded-lg bg-teal-600 text-white px-2.5 text-xs">
                       Go
                     </button>
                   </form>
+
+                  {/* Outside crane clock */}
+                  {craneLogs
+                    .filter((c) => c.unitId === unit.id)
+                    .map((crane) => (
+                      <div
+                        key={crane.id}
+                        className="flex items-center justify-between text-xs bg-orange-50 text-orange-900 rounded px-2 py-1.5"
+                      >
+                        <span>
+                          🏗 Outside crane{" "}
+                          <span className="text-orange-600">
+                            ({crane.purpose === "DISPATCH" ? "Dispatch" : "Material Handling"}
+                            {crane.note ? ` — ${crane.note}` : ""})
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <span className="font-semibold">
+                            <LiveDuration since={crane.startedAt} />
+                          </span>
+                          <form action={stopCrane}>
+                            <input type="hidden" name="craneLogId" value={crane.id} />
+                            <button className="text-red-600 hover:underline">Stop</button>
+                          </form>
+                        </span>
+                      </div>
+                    ))}
+                  <details>
+                    <summary className="cursor-pointer text-xs text-orange-700 font-medium select-none">
+                      🏗 Called an outside crane?
+                    </summary>
+                    <form action={startCrane} className="mt-1.5 flex flex-wrap gap-1.5">
+                      <input type="hidden" name="unitId" value={unit.id} />
+                      <select
+                        name="purpose"
+                        className="rounded-lg border border-slate-300 px-1.5 py-1.5 text-xs"
+                      >
+                        <option value="MATERIAL_HANDLING">For Material Handling</option>
+                        <option value="DISPATCH">For Dispatch</option>
+                      </select>
+                      <input
+                        name="note"
+                        placeholder="Note (optional)"
+                        className="flex-1 min-w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                      />
+                      <button className="rounded-lg bg-orange-600 text-white px-2.5 py-1.5 text-xs font-medium">
+                        Start crane clock
+                      </button>
+                    </form>
+                  </details>
                 </div>
               </section>
             );

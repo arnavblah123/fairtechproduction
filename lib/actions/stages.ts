@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireUser, assertUnitAccess } from "@/lib/permissions";
@@ -27,6 +28,7 @@ export async function setStageStatus(formData: FormData) {
   });
   assertUnitAccess(user, stage.job.unitId);
 
+  const stoppedEmployeeIds: string[] = [];
   await db.$transaction(async (tx) => {
     await tx.stage.update({
       where: { id: stageId },
@@ -45,6 +47,7 @@ export async function setStageStatus(formData: FormData) {
           where: { id: log.id },
           data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
         });
+        stoppedEmployeeIds.push(log.employeeId);
       }
     }
 
@@ -57,6 +60,10 @@ export async function setStageStatus(formData: FormData) {
     await audit(user.id, "stage.status", "Stage", stageId, { status, jobId: stage.jobId }, tx);
   });
   revalidateJob(stage.jobId);
+  // Pausing freed up workers — ask where they're going now.
+  if (status === "PAUSED" && stoppedEmployeeIds.length > 0) {
+    redirect(`/jobs/${stage.jobId}?shift=${[...new Set(stoppedEmployeeIds)].join(",")}`);
+  }
 }
 
 // Assign a worker to a stage. Any open log the worker has elsewhere is closed
@@ -145,8 +152,16 @@ export async function assignGeneralDuty(formData: FormData) {
   const user = await requireUser();
   const unitId = String(formData.get("unitId") ?? "");
   const employeeId = String(formData.get("employeeId") ?? "");
-  const activity = String(formData.get("activity") ?? "") as "MATERIAL_HANDLING" | "DISPATCH";
-  if (!employeeId || !["MATERIAL_HANDLING", "DISPATCH"].includes(activity)) return;
+  const activity = String(formData.get("activity") ?? "") as
+    | "MATERIAL_HANDLING"
+    | "DISPATCH"
+    | "PLATE_CUTTING"
+    | "STRUCTURAL_CUTTING";
+  if (
+    !employeeId ||
+    !["MATERIAL_HANDLING", "DISPATCH", "PLATE_CUTTING", "STRUCTURAL_CUTTING"].includes(activity)
+  )
+    return;
   assertUnitAccess(user, unitId);
   const employee = await db.employee.findUniqueOrThrow({ where: { id: employeeId } });
 
@@ -194,6 +209,7 @@ export async function completeStage(formData: FormData) {
   assertUnitAccess(user, stage.job.unitId);
   if (stage.job.status === "COMPLETED") return;
 
+  const stoppedEmployeeIds: string[] = [];
   await db.$transaction(async (tx) => {
     await tx.stage.update({
       where: { id: stageId },
@@ -210,6 +226,7 @@ export async function completeStage(formData: FormData) {
         where: { id: log.id },
         data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
       });
+      stoppedEmployeeIds.push(log.employeeId);
     }
     await audit(user.id, "stage.done", "Stage", stageId, {
       jobId: stage.jobId,
@@ -217,6 +234,10 @@ export async function completeStage(formData: FormData) {
     }, tx);
   });
   revalidateJob(stage.jobId);
+  // The stage's workers are free now — ask where each one is going.
+  if (stoppedEmployeeIds.length > 0) {
+    redirect(`/jobs/${stage.jobId}?shift=${[...new Set(stoppedEmployeeIds)].join(",")}`);
+  }
 }
 
 // Record rework on a stage. The reason is mandatory; the stage moves to the
@@ -257,6 +278,36 @@ export async function recordRework(formData: FormData) {
     }, tx);
   });
   revalidateJob(stage.jobId);
+}
+
+// Shift one freed-up worker to their next work: another stage of the job,
+// or a general duty. Used by the "where is this person going now?" panel
+// that appears after a stage is marked Done or Paused.
+export async function shiftWorker(formData: FormData) {
+  await requireUser(); // permissions enforced again inside the called actions
+  const employeeId = String(formData.get("employeeId") ?? "");
+  const target = String(formData.get("target") ?? "");
+  const jobId = String(formData.get("jobId") ?? "");
+  const remaining = String(formData.get("remaining") ?? "")
+    .split(",")
+    .filter((id) => id && id !== employeeId);
+
+  if (target.startsWith("stage:")) {
+    const fd = new FormData();
+    fd.set("stageId", target.slice("stage:".length));
+    fd.set("employeeId", employeeId);
+    await assignWorker(fd);
+  } else if (target.startsWith("duty:")) {
+    const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
+    const fd = new FormData();
+    fd.set("unitId", job.unitId);
+    fd.set("employeeId", employeeId);
+    fd.set("activity", target.slice("duty:".length));
+    await assignGeneralDuty(fd);
+  }
+  // target "none" = leave the worker stopped for now.
+
+  redirect(remaining.length > 0 ? `/jobs/${jobId}?shift=${remaining.join(",")}` : `/jobs/${jobId}`);
 }
 
 // Admins can append an extra stage to a job in progress.

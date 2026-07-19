@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, canAccessUnit, isAdmin } from "@/lib/permissions";
 import { setJobStatus, deleteJob } from "@/lib/actions/jobs";
-import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework } from "@/lib/actions/stages";
+import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework, shiftWorker } from "@/lib/actions/stages";
 import { raiseIssue, resolveIssue } from "@/lib/actions/issues";
 import { addJobTest, deleteJobTest } from "@/lib/actions/tests";
 import {
@@ -26,11 +26,14 @@ const btn = "rounded-lg px-3 py-1.5 text-sm font-medium";
 
 export default async function JobPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ shift?: string }>;
 }) {
   const user = await requireUser();
   const { id } = await params;
+  const { shift } = await searchParams;
 
   const job = await db.job.findUnique({
     where: { id },
@@ -101,6 +104,16 @@ export default async function JobPage({
   const totalReworks = job.stages.reduce((n, s) => n + s.reworks.length, 0);
   const admin = isAdmin(user);
 
+  // Workers freed by a just-completed/paused stage, awaiting their next work.
+  const shiftIds = (shift ?? "").split(",").filter(Boolean);
+  const shiftEmployees = shiftIds.length
+    ? await db.employee.findMany({
+        where: { id: { in: shiftIds }, active: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+  const shiftTargets = job.stages.filter((s) => s.status !== "DONE");
+
   // Live idle indicator: in progress but nobody clocked on right now.
   const openLogCount = job.stages.reduce((n, s) => n + s.timeLogs.length, 0);
   const isIdle = job.status === "IN_PROGRESS" && openLogCount === 0;
@@ -112,6 +125,76 @@ export default async function JobPage({
 
   return (
     <div className="space-y-5">
+      {/* Where are these freed-up workers going now? */}
+      {shiftEmployees.length > 0 && (
+        <section className="bg-blue-600 text-white rounded-xl shadow-md p-4">
+          <div className="flex items-start justify-between gap-2 mb-3">
+            <h2 className="font-semibold">
+              Where are you shifting {shiftEmployees.length === 1 ? "this person" : "these people"} now?
+            </h2>
+            <Link
+              href={`/jobs/${job.id}`}
+              className="text-xs text-blue-200 hover:text-white whitespace-nowrap"
+            >
+              Skip ✕
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {shiftEmployees.map((emp) => (
+              <form
+                key={emp.id}
+                action={shiftWorker}
+                className="flex flex-wrap items-center gap-2 bg-blue-500/40 rounded-lg px-3 py-2"
+              >
+                <input type="hidden" name="employeeId" value={emp.id} />
+                <input type="hidden" name="jobId" value={job.id} />
+                <input
+                  type="hidden"
+                  name="remaining"
+                  value={shiftIds.filter((x) => x !== emp.id).join(",")}
+                />
+                <span className="font-medium min-w-32">
+                  {emp.name}
+                  <span className="text-blue-200 text-xs font-normal"> ({emp.skill})</span>
+                </span>
+                <select
+                  name="target"
+                  className="flex-1 min-w-40 rounded-lg border-0 px-2 py-1.5 text-sm text-slate-900"
+                  defaultValue=""
+                  required
+                >
+                  <option value="" disabled>
+                    Next work…
+                  </option>
+                  {shiftTargets.length > 0 && (
+                    <optgroup label="This job's stages">
+                      {shiftTargets.map((s) => (
+                        <option key={s.id} value={`stage:${s.id}`}>
+                          {s.sequence}. {s.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="General duties">
+                    <option value="duty:MATERIAL_HANDLING">🚚 Material Handling</option>
+                    <option value="duty:DISPATCH">📦 Dispatch</option>
+                    <option value="duty:PLATE_CUTTING">🔥 Plate Cutting</option>
+                    <option value="duty:STRUCTURAL_CUTTING">🔩 Structural Cutting</option>
+                  </optgroup>
+                  <option value="none">Nothing for now (leave stopped)</option>
+                </select>
+                <button className="rounded-lg bg-white text-blue-700 px-3 py-1.5 text-sm font-semibold">
+                  Shift
+                </button>
+              </form>
+            ))}
+          </div>
+          <p className="text-xs text-blue-200 mt-2">
+            To move someone to a different job, open that job and assign them there.
+          </p>
+        </section>
+      )}
+
       {/* Header */}
       <div className="bg-white rounded-xl shadow-sm p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">

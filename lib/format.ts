@@ -55,6 +55,8 @@ export const ISSUE_TYPE_LABELS: Record<string, string> = {
 export const ACTIVITY_LABELS: Record<string, string> = {
   MATERIAL_HANDLING: "🚚 Material Handling",
   DISPATCH: "📦 Dispatch",
+  PLATE_CUTTING: "🔥 Plate Cutting",
+  STRUCTURAL_CUTTING: "🔩 Structural Cutting",
 };
 
 export function jobCode(jobNumber: number): string {
