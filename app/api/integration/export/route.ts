@@ -43,8 +43,30 @@ export async function GET(req: NextRequest) {
     agg.set(k, (agg.get(k) || 0) + hours);
   }
 
+  // Per-worker time logs for the last 90 days (plus still-open ones) — the
+  // inventory app uses these to settle who used a spool on which job.
+  const cutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000);
+  const workerLogs = await prisma.timeLog.findMany({
+    where: {
+      jobId: { not: null },
+      OR: [{ endedAt: { gte: cutoff } }, { endedAt: null }],
+    },
+    include: { employee: { select: { name: true, code: true } } },
+    orderBy: { startedAt: "asc" },
+  });
+
   return NextResponse.json({
     exportedAt: new Date().toISOString(),
+    timeLogs: workerLogs
+      .filter((l) => jobNumberById.has(l.jobId!))
+      .map((l) => ({
+        id: l.id,
+        employeeName: l.employee.name,
+        employeeCode: l.employee.code,
+        jobNumber: jobNumberById.get(l.jobId!),
+        startedAt: l.startedAt,
+        endedAt: l.endedAt,
+      })),
     jobs: jobs.map((j) => ({
       jobNumber: j.jobNumber,
       clientName: j.clientName,
