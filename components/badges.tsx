@@ -8,6 +8,7 @@ const jobStatusStyles: Record<string, string> = {
   NOT_STARTED: "bg-slate-200 text-slate-700",
   IN_PROGRESS: "bg-blue-100 text-blue-800",
   ON_HOLD: "bg-amber-100 text-amber-800",
+  READY_TO_DISPATCH: "bg-cyan-100 text-cyan-800",
   COMPLETED: "bg-green-100 text-green-800",
 };
 

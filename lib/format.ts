@@ -35,6 +35,7 @@ export const JOB_STATUS_LABELS: Record<string, string> = {
   NOT_STARTED: "Not Started",
   IN_PROGRESS: "In Progress",
   ON_HOLD: "On Hold",
+  READY_TO_DISPATCH: "Ready to Dispatch",
   COMPLETED: "Completed",
 };
 

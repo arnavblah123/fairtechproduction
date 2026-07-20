@@ -16,7 +16,13 @@ import type { JobStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-const JOB_STATUSES = ["NOT_STARTED", "IN_PROGRESS", "ON_HOLD", "COMPLETED"] as const;
+const JOB_STATUSES = [
+  "NOT_STARTED",
+  "IN_PROGRESS",
+  "ON_HOLD",
+  "READY_TO_DISPATCH",
+  "COMPLETED",
+] as const;
 
 // Live overview: units side by side, jobs with status, current workers with
 // running durations, open-issue flags. Filter by unit / client / status.
@@ -234,6 +240,11 @@ export default async function DashboardPage({
                         </div>
                         <p className="text-xs text-slate-500 mt-1">
                           Due {formatDate(job.expectedCompletion)}
+                          {job.status === "READY_TO_DISPATCH" && job.estimatedDispatchAt && (
+                            <span className="text-cyan-700 font-medium">
+                              {" "}· 🚚 dispatch est. {formatDate(job.estimatedDispatchAt)}
+                            </span>
+                          )}
                           {activeStage && (
                             <>
                               {" · "}

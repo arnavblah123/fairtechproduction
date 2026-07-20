@@ -137,6 +137,7 @@ enum JobStatus {
   NOT_STARTED
   IN_PROGRESS
   ON_HOLD
+  READY_TO_DISPATCH // supervisor's Final Done: production finished, awaiting dispatch
   COMPLETED
 }
 
@@ -154,6 +155,7 @@ model Job {
   status             JobStatus @default(NOT_STARTED)
   priority           Boolean   @default(false)
   completedAt        DateTime? // set when status moves to COMPLETED, cleared if reopened
+  estimatedDispatchAt DateTime? // given by the supervisor at Final Done
   googleEventId      String? // Google Calendar event backing the deadline reminder
   templateId         String?
   template           JobTemplate? @relation(fields: [templateId], references: [id])

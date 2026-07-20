@@ -59,6 +59,7 @@ export default async function JobsPage({
           <option value="NOT_STARTED">Not Started</option>
           <option value="IN_PROGRESS">In Progress</option>
           <option value="ON_HOLD">On Hold</option>
+          <option value="READY_TO_DISPATCH">Ready to Dispatch</option>
           <option value="COMPLETED">Completed</option>
         </select>
         <button className="rounded-lg bg-slate-900 text-white px-4 py-1.5">Filter</button>

@@ -273,6 +273,46 @@ export async function setJobStatus(formData: FormData) {
   revalidatePath("/");
 }
 
+// Supervisor's Final Done: all production work on the job is finished.
+// Requires the estimated dispatch date, stops every clock on the job, and
+// moves it to Ready to Dispatch. The admin's Mark Completed remains the
+// final closure at actual dispatch.
+export async function finalDone(formData: FormData) {
+  const user = await requireUser();
+  const jobId = String(formData.get("jobId") ?? "");
+  const estRaw = String(formData.get("estimatedDispatch") ?? "");
+  const estimatedDispatchAt = estRaw ? new Date(estRaw) : null;
+  if (!estimatedDispatchAt || isNaN(estimatedDispatchAt.getTime())) return;
+  const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
+  assertUnitAccess(user, job.unitId);
+  if (job.status === "COMPLETED") return;
+
+  const stoppedEmployeeIds: string[] = [];
+  await db.$transaction(async (tx) => {
+    await tx.job.update({
+      where: { id: jobId },
+      data: { status: "READY_TO_DISPATCH", estimatedDispatchAt },
+    });
+    const open = await tx.timeLog.findMany({ where: { jobId, endedAt: null } });
+    for (const log of open) {
+      await tx.timeLog.update({
+        where: { id: log.id },
+        data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
+      });
+      stoppedEmployeeIds.push(log.employeeId);
+    }
+    await audit(user.id, "job.finalDone", "Job", jobId, {
+      estimatedDispatchAt: estimatedDispatchAt.toISOString(),
+    }, tx);
+  });
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/jobs");
+  revalidatePath("/");
+  if (stoppedEmployeeIds.length > 0) {
+    redirect(`/jobs/${jobId}?shift=${[...new Set(stoppedEmployeeIds)].join(",")}`);
+  }
+}
+
 export async function deleteJob(formData: FormData) {
   const user = await requireUser();
   if (user.role !== "SUPERADMIN") throw new Error("Only the superadmin can delete jobs.");

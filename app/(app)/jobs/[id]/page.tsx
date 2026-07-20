@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, canAccessUnit, isAdmin } from "@/lib/permissions";
-import { setJobStatus, deleteJob } from "@/lib/actions/jobs";
+import { setJobStatus, deleteJob, finalDone } from "@/lib/actions/jobs";
 import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework, shiftWorker, setShiftPlan } from "@/lib/actions/stages";
 import { shiftPlanLabel } from "@/lib/shift";
 import { raiseIssue, resolveIssue } from "@/lib/actions/issues";
@@ -227,6 +227,14 @@ export default async function JobPage({
                 <dt className="text-xs text-slate-400">Due</dt>
                 <dd className="font-medium">{formatDate(job.expectedCompletion)}</dd>
               </div>
+              {job.estimatedDispatchAt && (
+                <div>
+                  <dt className="text-xs text-slate-400">Est. dispatch</dt>
+                  <dd className="font-medium text-cyan-700">
+                    {formatDate(job.estimatedDispatchAt)}
+                  </dd>
+                </div>
+              )}
               {job.buyerName && (
                 <div>
                   <dt className="text-xs text-slate-400">Buyer</dt>
@@ -294,6 +302,50 @@ export default async function JobPage({
                 </button>
               </form>
             )}
+            {/* Final Done: production finished, estimated dispatch date required */}
+            {job.status !== "COMPLETED" && (
+              <details className="relative">
+                <summary
+                  className={`${btn} inline-block cursor-pointer select-none ${
+                    job.status === "READY_TO_DISPATCH"
+                      ? "bg-cyan-50 text-cyan-800 hover:bg-cyan-100"
+                      : "bg-cyan-600 text-white hover:bg-cyan-700"
+                  }`}
+                >
+                  {job.status === "READY_TO_DISPATCH"
+                    ? "Update dispatch date"
+                    : "🏁 Final Done"}
+                </summary>
+                <form
+                  action={finalDone}
+                  className="absolute right-0 z-10 mt-1 w-60 bg-white rounded-xl shadow-lg border border-slate-200 p-3 space-y-2"
+                >
+                  <input type="hidden" name="jobId" value={job.id} />
+                  <label className="block text-xs font-medium text-slate-600">
+                    Estimated dispatch date *
+                    <input
+                      type="date"
+                      name="estimatedDispatch"
+                      required
+                      defaultValue={
+                        job.estimatedDispatchAt?.toISOString().slice(0, 10) ?? ""
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                    />
+                  </label>
+                  <button className="w-full rounded-lg bg-cyan-600 text-white py-1.5 text-sm font-medium">
+                    {job.status === "READY_TO_DISPATCH"
+                      ? "Save date"
+                      : "Confirm: production finished"}
+                  </button>
+                  {job.status !== "READY_TO_DISPATCH" && (
+                    <p className="text-[11px] text-slate-500">
+                      Stops all clocks on this job and marks it Ready to Dispatch.
+                    </p>
+                  )}
+                </form>
+              </details>
+            )}
             {admin && job.status !== "COMPLETED" && (
               <form action={setJobStatus}>
                 <input type="hidden" name="jobId" value={job.id} />
@@ -309,12 +361,24 @@ export default async function JobPage({
               </Link>
             )}
             {user.role === "SUPERADMIN" && (
-              <form action={deleteJob}>
-                <input type="hidden" name="jobId" value={job.id} />
-                <button className={`${btn} bg-red-50 text-red-700 hover:bg-red-100`}>
+              <details className="relative">
+                <summary className={`${btn} inline-block cursor-pointer select-none bg-red-50 text-red-700 hover:bg-red-100`}>
                   Delete
-                </button>
-              </form>
+                </summary>
+                <form
+                  action={deleteJob}
+                  className="absolute right-0 z-10 mt-1 w-56 bg-white rounded-xl shadow-lg border border-red-200 p-3 space-y-2"
+                >
+                  <input type="hidden" name="jobId" value={job.id} />
+                  <p className="text-xs text-slate-600">
+                    Permanently deletes this job with all its stages, time logs
+                    and documents. Cannot be undone.
+                  </p>
+                  <button className="w-full rounded-lg bg-red-600 text-white py-1.5 text-sm font-medium">
+                    Yes, delete permanently
+                  </button>
+                </form>
+              </details>
             )}
           </div>
         </div>
