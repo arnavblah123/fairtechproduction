@@ -84,6 +84,25 @@ export async function createJob(
     });
   }
 
+  // Each test becomes its own timed stage, inserted right after the stage it
+  // follows (or at the end for final tests) — so testing work is assigned
+  // and clocked like any other stage.
+  const finalStages: { name: string; description: string | null; testIdx: number | null }[] =
+    stages.map((s) => ({ ...s, testIdx: null }));
+  tests
+    .map((t, ti) => ({ ...t, ti }))
+    .filter((t) => t.stageIndex !== null)
+    .sort((a, b) => b.stageIndex! - a.stageIndex!)
+    .forEach((t) => {
+      finalStages.splice(t.stageIndex!, 0, { name: t.name, description: "Testing", testIdx: t.ti });
+    });
+  tests
+    .map((t, ti) => ({ ...t, ti }))
+    .filter((t) => t.stageIndex === null)
+    .forEach((t) => {
+      finalStages.push({ name: t.name, description: "Testing", testIdx: t.ti });
+    });
+
   // Drawings & bill of material, validated and buffered before anything is
   // written to the database.
   let attachments: PendingAttachment[];
@@ -132,7 +151,11 @@ export async function createJob(
         templateId: usedTemplateId,
         createdById: user.id,
         stages: {
-          create: stages.map((s, i) => ({ ...s, sequence: i + 1 })),
+          create: finalStages.map((s, i) => ({
+            name: s.name,
+            description: s.description,
+            sequence: i + 1,
+          })),
         },
       },
     });
@@ -142,11 +165,14 @@ export async function createJob(
         orderBy: { sequence: "asc" },
       });
       await tx.jobTest.createMany({
-        data: tests.map((t) => ({
-          jobId: created.id,
-          name: t.name,
-          stageId: t.stageIndex ? createdStages[t.stageIndex - 1]?.id ?? null : null,
-        })),
+        data: finalStages
+          .map((s, pos) => ({ s, pos }))
+          .filter(({ s }) => s.testIdx !== null)
+          .map(({ s, pos }) => ({
+            jobId: created.id,
+            name: s.name,
+            stageId: createdStages[pos]?.id ?? null,
+          })),
       });
     }
     if (attachments.length > 0) {

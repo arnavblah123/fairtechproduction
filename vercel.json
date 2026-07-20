@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/cron/shift-end", "schedule": "30 16 * * *" },
+    { "path": "/api/cron/shift-end", "schedule": "0 21 * * *" }
+  ]
+}

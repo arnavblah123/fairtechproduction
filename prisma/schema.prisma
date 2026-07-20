@@ -263,6 +263,7 @@ model StageRework {
 enum LogSource {
   MANUAL // supervisor action in the app
   AUTO_ATTENDANCE // attendance system login/logout event
+  AUTO_SHIFT_END // night-plan cutoff (10 PM / 2:30 AM) closed the clock
 }
 
 // What the worker is engaged in: production stage work, or general duties
@@ -307,6 +308,9 @@ model TimeLog {
   unit        Unit       @relation(fields: [unitId], references: [id])
   startedAt   DateTime   @default(now())
   endedAt     DateTime?
+  // Evening night plan: when set, the clock auto-stops at this time
+  // (10:00 PM or 2:30 AM IST).
+  plannedEndAt DateTime?
   startSource LogSource  @default(MANUAL)
   endSource   LogSource?
   startedById String? // user who assigned, null when auto

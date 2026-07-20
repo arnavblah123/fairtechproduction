@@ -5,22 +5,42 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireUser, isAdmin, assertUnitAccess } from "@/lib/permissions";
 
-// Add a testing requirement to an existing job.
+// Add a testing requirement to an existing job. The test gets its own timed
+// stage, inserted right after the chosen stage (or at the end), so testing
+// work is assigned and clocked like any other stage.
 export async function addJobTest(formData: FormData) {
   const user = await requireUser();
   const jobId = String(formData.get("jobId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
-  const stageId = String(formData.get("stageId") ?? "") || null;
+  const afterStageId = String(formData.get("stageId") ?? "") || null;
   if (!name) return;
   const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
   assertUnitAccess(user, job.unitId);
   if (job.status === "COMPLETED") return;
-  if (stageId) {
-    const stage = await db.stage.findUniqueOrThrow({ where: { id: stageId } });
-    if (stage.jobId !== jobId) return;
-  }
-  const test = await db.jobTest.create({ data: { jobId, stageId, name } });
-  await audit(user.id, "test.add", "JobTest", test.id, { jobId, name, stageId });
+
+  const test = await db.$transaction(async (tx) => {
+    let sequence: number;
+    if (afterStageId) {
+      const after = await tx.stage.findUniqueOrThrow({ where: { id: afterStageId } });
+      if (after.jobId !== jobId) throw new Error("Stage belongs to a different job.");
+      sequence = after.sequence + 1;
+      await tx.stage.updateMany({
+        where: { jobId, sequence: { gte: sequence } },
+        data: { sequence: { increment: 1 } },
+      });
+    } else {
+      const last = await tx.stage.findFirst({
+        where: { jobId },
+        orderBy: { sequence: "desc" },
+      });
+      sequence = (last?.sequence ?? 0) + 1;
+    }
+    const testStage = await tx.stage.create({
+      data: { jobId, name, description: "Testing", sequence },
+    });
+    return tx.jobTest.create({ data: { jobId, stageId: testStage.id, name } });
+  });
+  await audit(user.id, "test.add", "JobTest", test.id, { jobId, name, stageId: test.stageId });
   revalidatePath(`/jobs/${jobId}`);
 }
 

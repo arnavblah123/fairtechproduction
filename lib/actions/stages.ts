@@ -280,6 +280,29 @@ export async function recordRework(formData: FormData) {
   revalidateJob(stage.jobId);
 }
 
+// Evening night plan for one running clock: till 10 PM, full night
+// (2:30 AM), or back to normal. The clock auto-stops at the cutoff.
+export async function setShiftPlan(formData: FormData) {
+  const user = await requireUser();
+  const timeLogId = String(formData.get("timeLogId") ?? "");
+  const plan = String(formData.get("plan") ?? "");
+  const log = await db.timeLog.findUniqueOrThrow({ where: { id: timeLogId } });
+  assertUnitAccess(user, log.unitId);
+  if (log.endedAt) return;
+
+  const { shiftPlanEnd } = await import("@/lib/shift");
+  const plannedEndAt =
+    plan === "TEN_PM" || plan === "FULL_NIGHT" ? shiftPlanEnd(plan) : null;
+  await db.timeLog.update({ where: { id: timeLogId }, data: { plannedEndAt } });
+  await audit(user.id, "timelog.shiftPlan", "TimeLog", timeLogId, {
+    plan,
+    plannedEndAt: plannedEndAt?.toISOString() ?? null,
+  });
+  if (log.jobId) revalidateJob(log.jobId);
+  revalidatePath("/");
+  revalidatePath("/employees");
+}
+
 // Shift one freed-up worker to their next work: another stage of the job,
 // or a general duty. Used by the "where is this person going now?" panel
 // that appears after a stage is marked Done or Paused.

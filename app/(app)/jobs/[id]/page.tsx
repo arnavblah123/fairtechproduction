@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, canAccessUnit, isAdmin } from "@/lib/permissions";
 import { setJobStatus, deleteJob } from "@/lib/actions/jobs";
-import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework, shiftWorker } from "@/lib/actions/stages";
+import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework, shiftWorker, setShiftPlan } from "@/lib/actions/stages";
+import { shiftPlanLabel } from "@/lib/shift";
 import { raiseIssue, resolveIssue } from "@/lib/actions/issues";
 import { addJobTest, deleteJobTest } from "@/lib/actions/tests";
 import {
@@ -374,9 +375,7 @@ export default async function JobPage({
             >
               <span className="font-medium text-sky-900">🧪 {test.name}</span>
               <span className="text-xs text-slate-500">
-                {test.stage
-                  ? `after ${test.stage.sequence}. ${test.stage.name}`
-                  : "final / whole job"}
+                {test.stage ? `stage ${test.stage.sequence} on the board` : "final / whole job"}
               </span>
               {admin && (
                 <form action={deleteJobTest} className="ml-auto">
@@ -574,22 +573,51 @@ export default async function JobPage({
                   {stage.timeLogs.map((log) => (
                     <li
                       key={log.id}
-                      className="flex items-center justify-between bg-white rounded-lg px-2 py-1.5 text-sm shadow-sm"
+                      className="bg-white rounded-lg px-2 py-1.5 text-sm shadow-sm space-y-1"
                     >
-                      <span>
-                        {log.employee.name}
-                        <span className="text-xs text-slate-400 ml-1">
-                          <LiveDuration since={log.startedAt} />
+                      <div className="flex items-center justify-between">
+                        <span>
+                          {log.employee.name}
+                          <span className="text-xs text-slate-400 ml-1">
+                            <LiveDuration since={log.startedAt} />
+                          </span>
                         </span>
-                      </span>
-                      <form action={stopWorker}>
+                        <form action={stopWorker}>
+                          <input type="hidden" name="timeLogId" value={log.id} />
+                          <button
+                            className="text-xs font-medium text-red-600 rounded-lg px-2.5 py-1.5 hover:bg-red-50 active:bg-red-100"
+                            title="Stop this worker's clock"
+                          >
+                            Stop
+                          </button>
+                        </form>
+                      </div>
+                      {/* Evening night plan */}
+                      <form action={setShiftPlan} className="flex items-center gap-1">
                         <input type="hidden" name="timeLogId" value={log.id} />
-                        <button
-                          className="text-xs font-medium text-red-600 rounded-lg px-2.5 py-1.5 hover:bg-red-50 active:bg-red-100"
-                          title="Stop this worker's clock"
+                        <select
+                          name="plan"
+                          defaultValue={
+                            log.plannedEndAt
+                              ? shiftPlanLabel(log.plannedEndAt).includes("10 PM")
+                                ? "TEN_PM"
+                                : "FULL_NIGHT"
+                              : "NORMAL"
+                          }
+                          className="flex-1 min-w-0 rounded border border-slate-200 px-1.5 py-1 text-[11px] text-slate-600"
                         >
-                          Stop
+                          <option value="NORMAL">Normal day</option>
+                          <option value="TEN_PM">Till 10 PM</option>
+                          <option value="FULL_NIGHT">Full night (2:30 AM)</option>
+                        </select>
+                        <button className="rounded bg-slate-100 px-1.5 py-1 text-[11px]" title="Save plan">
+                          ✓
                         </button>
+                        {log.plannedEndAt && (
+                          <span className="text-[10px] font-semibold text-indigo-700 whitespace-nowrap">
+                            🌙 {shiftPlanLabel(log.plannedEndAt)}
+                          </span>
+                        )}
                       </form>
                     </li>
                   ))}
@@ -780,6 +808,8 @@ export default async function JobPage({
                     {log.endedAt &&
                       (log.endSource === "AUTO_ATTENDANCE"
                         ? " / auto-logout"
+                        : log.endSource === "AUTO_SHIFT_END"
+                        ? " / night-plan cutoff"
                         : ` / ${log.endedBy?.name ?? "manual"}`)}
                   </td>
                 </tr>

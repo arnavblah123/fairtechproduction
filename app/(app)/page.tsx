@@ -10,6 +10,8 @@ import { LiveDuration } from "@/components/live-duration";
 import { formatDate, formatDateTime, jobCode, ACTIVITY_LABELS } from "@/lib/format";
 import { assignGeneralDuty, stopWorker } from "@/lib/actions/stages";
 import { startCrane, stopCrane } from "@/lib/actions/crane";
+import { setShiftPlan } from "@/lib/actions/stages";
+import { closeOverdueShifts, shiftPlanLabel } from "@/lib/shift";
 import type { JobStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +28,10 @@ export default async function DashboardPage({
   const user = await requireUser();
   const { unit: unitFilter, client: clientFilter, status: statusFilter } =
     await searchParams;
+
+  // Lazy sweep: stop any clock whose night-plan cutoff has passed (the
+  // scheduled cron also does this at 10 PM / 2:30 AM).
+  await closeOverdueShifts();
 
   const units = await db.unit.findMany({
     where: user.role === "SUPERADMIN" ? {} : { id: { in: user.unitIds } },
@@ -286,9 +292,33 @@ export default async function DashboardPage({
                           </span>
                         </span>
                         <span className="flex items-center gap-2">
+                          {log.plannedEndAt && (
+                            <span className="text-[10px] font-semibold text-indigo-700 whitespace-nowrap">
+                              🌙 {shiftPlanLabel(log.plannedEndAt)}
+                            </span>
+                          )}
                           <span className="font-medium">
                             <LiveDuration since={log.startedAt} />
                           </span>
+                          <form action={setShiftPlan} className="flex items-center gap-1">
+                            <input type="hidden" name="timeLogId" value={log.id} />
+                            <select
+                              name="plan"
+                              defaultValue={
+                                log.plannedEndAt
+                                  ? shiftPlanLabel(log.plannedEndAt).includes("10 PM")
+                                    ? "TEN_PM"
+                                    : "FULL_NIGHT"
+                                  : "NORMAL"
+                              }
+                              className="rounded border border-teal-200 px-1 py-0.5 text-[10px] text-teal-800 bg-white"
+                            >
+                              <option value="NORMAL">Normal</option>
+                              <option value="TEN_PM">Till 10 PM</option>
+                              <option value="FULL_NIGHT">Full night</option>
+                            </select>
+                            <button className="text-teal-700" title="Save plan">✓</button>
+                          </form>
                           <form action={stopWorker}>
                             <input type="hidden" name="timeLogId" value={log.id} />
                             <button className="text-red-600 hover:underline" title="Stop">
