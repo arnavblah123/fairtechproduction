@@ -8,7 +8,9 @@ import {
 } from "@/components/badges";
 import { LiveDuration } from "@/components/live-duration";
 import { formatDate, formatDateTime, jobCode, ACTIVITY_LABELS } from "@/lib/format";
-import { assignGeneralDuty, stopWorker } from "@/lib/actions/stages";
+import { assignGeneralDuty, assignDispatchWorker, stopWorker } from "@/lib/actions/stages";
+import { setJobStatus } from "@/lib/actions/jobs";
+import { isAdmin } from "@/lib/permissions";
 import { startCrane, stopCrane } from "@/lib/actions/crane";
 import { setShiftPlan } from "@/lib/actions/stages";
 import { closeOverdueShifts, shiftPlanLabel } from "@/lib/shift";
@@ -187,7 +189,9 @@ export default async function DashboardPage({
         {units
           .filter((u) => !unitFilter || u.id === unitFilter)
           .map((unit) => {
-            const unitJobs = jobs.filter((j) => j.unitId === unit.id);
+            const allUnitJobs = jobs.filter((j) => j.unitId === unit.id);
+            const unitJobs = allUnitJobs.filter((j) => j.status !== "READY_TO_DISPATCH");
+            const dispatchJobs = allUnitJobs.filter((j) => j.status === "READY_TO_DISPATCH");
             return (
               <section key={unit.id} className="bg-white rounded-xl shadow-sm">
                 <header className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
@@ -196,7 +200,7 @@ export default async function DashboardPage({
                     <p className="text-xs text-slate-500">{unit.location}</p>
                   </div>
                   <span className="text-sm text-slate-500">
-                    {unitJobs.length} job{unitJobs.length === 1 ? "" : "s"}
+                    {allUnitJobs.length} job{allUnitJobs.length === 1 ? "" : "s"}
                   </span>
                 </header>
                 <div className="divide-y divide-slate-100">
@@ -269,7 +273,7 @@ export default async function DashboardPage({
                                 <span>
                                   {log.employee.name}{" "}
                                   <span className="text-blue-600">
-                                    on {log.stage?.name ?? "—"}
+                                    on {log.stage?.name ?? ACTIVITY_LABELS[log.activity] ?? "—"}
                                   </span>
                                 </span>
                                 <span className="font-medium">
@@ -283,6 +287,95 @@ export default async function DashboardPage({
                     );
                   })}
                 </div>
+
+                {/* Ready to Dispatch: finished jobs awaiting the truck */}
+                {dispatchJobs.length > 0 && (
+                  <div className="border-t-2 border-cyan-200 bg-cyan-50/60 px-4 py-3 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">
+                      🚚 Ready to Dispatch
+                    </p>
+                    {dispatchJobs.map((job) => {
+                      const dispatchWorkers = job.timeLogs.filter((l) => !l.stage);
+                      return (
+                        <div key={job.id} className="bg-white rounded-lg p-2.5 space-y-1.5 shadow-sm">
+                          <div className="flex items-start justify-between gap-2">
+                            <Link href={`/jobs/${job.id}`} className="font-medium text-sm hover:underline">
+                              {job.clientName}
+                              <span className="text-slate-400 font-normal text-xs ml-1">
+                                {jobCode(job.jobNumber)}
+                              </span>
+                            </Link>
+                            {job.estimatedDispatchAt && (
+                              <span
+                                className={`text-xs whitespace-nowrap font-medium ${
+                                  job.estimatedDispatchAt.getTime() + 86400000 < Date.now()
+                                    ? "text-red-700"
+                                    : "text-cyan-700"
+                                }`}
+                              >
+                                est. {formatDate(job.estimatedDispatchAt)}
+                              </span>
+                            )}
+                          </div>
+                          {dispatchWorkers.map((log) => (
+                            <div
+                              key={log.id}
+                              className="flex items-center justify-between text-xs bg-cyan-50 text-cyan-900 rounded px-2 py-1"
+                            >
+                              <span>{log.employee.name} <span className="text-cyan-600">loading</span></span>
+                              <span className="flex items-center gap-2">
+                                <span className="font-semibold">
+                                  <LiveDuration since={log.startedAt} />
+                                </span>
+                                <form action={stopWorker}>
+                                  <input type="hidden" name="timeLogId" value={log.id} />
+                                  <button className="text-red-600 hover:underline">Stop</button>
+                                </form>
+                              </span>
+                            </div>
+                          ))}
+                          <div className="flex gap-1.5">
+                            <form action={assignDispatchWorker} className="flex gap-1.5 flex-1 min-w-0">
+                              <input type="hidden" name="jobId" value={job.id} />
+                              <select
+                                name="employeeId"
+                                required
+                                defaultValue=""
+                                className="flex-1 min-w-0 rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                              >
+                                <option value="" disabled>
+                                  Worker for dispatch…
+                                </option>
+                                {unitWorkers
+                                  .filter((w) => w.primaryUnitId === unit.id)
+                                  .map((w) => (
+                                    <option key={w.id} value={w.id}>
+                                      {w.name} ({w.skill})
+                                    </option>
+                                  ))}
+                              </select>
+                              <button className="rounded-lg bg-cyan-600 text-white px-2.5 text-xs">
+                                Go
+                              </button>
+                            </form>
+                            {isAdmin(user) && (
+                              <form action={setJobStatus}>
+                                <input type="hidden" name="jobId" value={job.id} />
+                                <input type="hidden" name="status" value="COMPLETED" />
+                                <button
+                                  className="rounded-lg bg-green-600 text-white px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
+                                  title="Job has left the factory — removes it from here; all data stays in History"
+                                >
+                                  Dispatched ✓
+                                </button>
+                              </form>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* General duties: material handling / dispatch */}
                 <div className="border-t border-slate-100 px-4 py-3 space-y-2">

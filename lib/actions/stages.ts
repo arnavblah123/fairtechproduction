@@ -336,6 +336,49 @@ export async function setShiftPlan(formData: FormData) {
   revalidatePath("/employees");
 }
 
+// Put a worker on dispatch loading for a specific job (used from the
+// Ready to Dispatch section) — clocked like any other work, against the job.
+export async function assignDispatchWorker(formData: FormData) {
+  const user = await requireUser();
+  const jobId = String(formData.get("jobId") ?? "");
+  const employeeId = String(formData.get("employeeId") ?? "");
+  if (!employeeId) return;
+  const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
+  assertUnitAccess(user, job.unitId);
+  if (job.status === "COMPLETED") return;
+  const employee = await db.employee.findUniqueOrThrow({ where: { id: employeeId } });
+
+  await db.$transaction(async (tx) => {
+    const open = await tx.timeLog.findMany({ where: { employeeId, endedAt: null } });
+    if (open.some((l) => l.jobId === jobId && l.activity === "DISPATCH")) return;
+    for (const log of open) {
+      await tx.timeLog.update({
+        where: { id: log.id },
+        data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
+      });
+      await audit(user.id, "timelog.stop", "TimeLog", log.id, { reason: "moved to dispatch" }, tx);
+    }
+    const newLog = await tx.timeLog.create({
+      data: {
+        employeeId,
+        jobId,
+        unitId: job.unitId,
+        activity: "DISPATCH",
+        startSource: "MANUAL",
+        startedById: user.id,
+      },
+    });
+    await audit(user.id, "timelog.assignDispatch", "TimeLog", newLog.id, {
+      employeeId,
+      employeeCode: employee.code,
+      jobId,
+    }, tx);
+  });
+  revalidatePath("/");
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/employees");
+}
+
 // Shift one freed-up worker to their next work: another stage of the job,
 // or a general duty. Used by the "where is this person going now?" panel
 // that appears after a stage is marked Done or Paused.

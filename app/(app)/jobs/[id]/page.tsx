@@ -126,9 +126,11 @@ export default async function JobPage({
 
   return (
     <div className="space-y-5">
-      {/* Where are these freed-up workers going now? */}
+      {/* Where are these freed-up workers going now? Blocking popup so it
+          can't be scrolled past and forgotten. */}
       {shiftEmployees.length > 0 && (
-        <section className="bg-blue-600 text-white rounded-xl shadow-md p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-start sm:items-center justify-center p-3 overflow-y-auto">
+        <section className="bg-blue-600 text-white rounded-xl shadow-2xl p-4 w-full max-w-lg my-6">
           <div className="flex items-start justify-between gap-2 mb-3">
             <h2 className="font-semibold">
               Where are you shifting {shiftEmployees.length === 1 ? "this person" : "these people"} now?
@@ -194,6 +196,7 @@ export default async function JobPage({
             To move someone to a different job, open that job and assign them there.
           </p>
         </section>
+        </div>
       )}
 
       {/* Header */}
