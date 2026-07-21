@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/permissions";
-import { updateUserRole, setUserActive } from "@/lib/actions/users";
+import { updateUserRole, setUserActive, setUserUnits } from "@/lib/actions/users";
 import { UserCreateForm } from "@/components/user-create-form";
 import { RoleBadge } from "@/components/badges";
 
@@ -48,9 +48,33 @@ export default async function UsersPage() {
                   <td className="px-4 py-3">{u.email}</td>
                   <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
                   <td className="px-4 py-3 text-xs text-slate-600">
-                    {u.role === "SUPERADMIN"
-                      ? "All units"
-                      : u.units.map((x) => x.unit.name).join(", ") || "—"}
+                    {u.role === "SUPERADMIN" ? (
+                      "All units"
+                    ) : manageable ? (
+                      <form action={setUserUnits} className="flex flex-wrap items-center gap-2">
+                        <input type="hidden" name="userId" value={u.id} />
+                        {units.map((unit) => (
+                          <label key={unit.id} className="flex items-center gap-1 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              name="unitIds"
+                              value={unit.id}
+                              defaultChecked={u.units.some((x) => x.unit.id === unit.id)}
+                              className="h-3.5 w-3.5"
+                            />
+                            {unit.code}
+                          </label>
+                        ))}
+                        <button className="rounded bg-slate-100 px-2 py-1" title="Save units">
+                          ✓
+                        </button>
+                        {u.units.length === 0 && (
+                          <span className="text-red-600 font-semibold">NO UNIT — cannot create jobs!</span>
+                        )}
+                      </form>
+                    ) : (
+                      u.units.map((x) => x.unit.name).join(", ") || "—"
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {manageable && (

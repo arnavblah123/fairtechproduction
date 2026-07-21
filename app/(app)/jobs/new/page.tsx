@@ -30,6 +30,20 @@ export default async function NewJobPage() {
     }),
   ]);
 
+  if (units.length === 0) {
+    return (
+      <div className="max-w-md mx-auto bg-white rounded-xl shadow p-6 text-center space-y-2">
+        <p className="text-3xl">🚫</p>
+        <h1 className="font-bold">No unit assigned to your account</h1>
+        <p className="text-sm text-slate-600">
+          Jobs are created inside a unit, and your login has no unit attached.
+          Ask the admin to open <b>Users</b> and tick your unit — then this
+          page will work.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-xl font-bold mb-4">New Job</h1>
