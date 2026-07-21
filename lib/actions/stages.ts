@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { requireUser, assertUnitAccess } from "@/lib/permissions";
+import { requireUser, assertUnitAccess, isAdmin } from "@/lib/permissions";
 import type { StageStatus } from "@prisma/client";
 
 function revalidateJob(jobId: string) {
@@ -28,6 +28,13 @@ export async function setStageStatus(formData: FormData) {
   });
   assertUnitAccess(user, stage.job.unitId);
 
+  // Optional task due date, offered when starting a stage. Write-once for
+  // supervisors: once a due date exists, only admins can change it.
+  const dueRaw = String(formData.get("dueAt") ?? "");
+  const dueAt = dueRaw ? new Date(dueRaw) : null;
+  const mayWriteDue =
+    dueAt && !isNaN(dueAt.getTime()) && (stage.dueAt === null || isAdmin(user));
+
   const stoppedEmployeeIds: string[] = [];
   await db.$transaction(async (tx) => {
     await tx.stage.update({
@@ -36,6 +43,7 @@ export async function setStageStatus(formData: FormData) {
         status,
         startedAt: status === "ACTIVE" && !stage.startedAt ? new Date() : stage.startedAt,
         completedAt: null,
+        ...(mayWriteDue ? { dueAt } : {}),
       },
     });
 
@@ -193,6 +201,31 @@ export async function assignGeneralDuty(formData: FormData) {
   });
   revalidatePath("/");
   revalidatePath("/employees");
+}
+
+// Set a task's due date after it has started. Write-once for supervisors —
+// once entered, only admins can change it.
+export async function setStageDue(formData: FormData) {
+  const user = await requireUser();
+  const stageId = String(formData.get("stageId") ?? "");
+  const dueRaw = String(formData.get("dueAt") ?? "");
+  const dueAt = dueRaw ? new Date(dueRaw) : null;
+  if (!dueAt || isNaN(dueAt.getTime())) return;
+  const stage = await db.stage.findUniqueOrThrow({
+    where: { id: stageId },
+    include: { job: true },
+  });
+  assertUnitAccess(user, stage.job.unitId);
+  if (stage.dueAt !== null && !isAdmin(user)) {
+    throw new Error("The task due date is already set — only admins can change it.");
+  }
+  await db.stage.update({ where: { id: stageId }, data: { dueAt } });
+  await audit(user.id, "stage.due", "Stage", stageId, {
+    jobId: stage.jobId,
+    dueAt: dueAt.toISOString(),
+    changed: stage.dueAt !== null,
+  });
+  revalidateJob(stage.jobId);
 }
 
 // Complete a stage — the quality check. The name of whoever inspected/

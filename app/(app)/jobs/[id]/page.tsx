@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, canAccessUnit, isAdmin } from "@/lib/permissions";
 import { setJobStatus, deleteJob, finalDone } from "@/lib/actions/jobs";
-import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework, shiftWorker, setShiftPlan } from "@/lib/actions/stages";
+import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework, shiftWorker, setShiftPlan, setStageDue } from "@/lib/actions/stages";
 import { shiftPlanLabel } from "@/lib/shift";
 import { raiseIssue, resolveIssue } from "@/lib/actions/issues";
 import { addJobTest, deleteJobTest } from "@/lib/actions/tests";
@@ -594,6 +594,55 @@ export default async function JobPage({
                 </div>
               )}
 
+              {/* Task due date: write-once for supervisors, admin can correct */}
+              {stage.dueAt ? (
+                <p
+                  className={`text-xs font-medium ${
+                    stage.status !== "DONE" && stage.dueAt.getTime() < Date.now()
+                      ? "text-red-700"
+                      : "text-slate-600"
+                  }`}
+                >
+                  📅 Task due {formatDate(stage.dueAt)}
+                  {stage.status !== "DONE" && stage.dueAt.getTime() < Date.now() && " — OVERDUE"}
+                  {admin && (
+                    <details className="inline-block ml-2 align-middle">
+                      <summary className="cursor-pointer text-[10px] text-slate-400 select-none">
+                        change
+                      </summary>
+                      <form action={setStageDue} className="mt-1 flex gap-1">
+                        <input type="hidden" name="stageId" value={stage.id} />
+                        <input
+                          type="date"
+                          name="dueAt"
+                          required
+                          className="rounded border border-slate-300 px-1.5 py-1 text-xs"
+                        />
+                        <button className="rounded bg-slate-900 text-white px-2 py-1 text-xs">✓</button>
+                      </form>
+                    </details>
+                  )}
+                </p>
+              ) : (
+                stage.status !== "PENDING" &&
+                stage.status !== "DONE" &&
+                job.status !== "COMPLETED" && (
+                  <form action={setStageDue} className="flex items-center gap-1">
+                    <input type="hidden" name="stageId" value={stage.id} />
+                    <input
+                      type="date"
+                      name="dueAt"
+                      required
+                      title="Task due date — cannot be changed once set"
+                      className="rounded border border-slate-200 px-1.5 py-1 text-[11px] text-slate-500"
+                    />
+                    <button className="rounded bg-slate-100 px-1.5 py-1 text-[11px]" title="Set task due date">
+                      📅 Set due
+                    </button>
+                  </form>
+                )
+              )}
+
               {/* Start / end time of this stage */}
               {stage.startedAt && (
                 <p className="text-xs text-slate-500 leading-snug">
@@ -721,9 +770,17 @@ export default async function JobPage({
               <div className="flex flex-wrap gap-1.5">
                 {(stage.status === "PENDING" || stage.status === "PAUSED") &&
                   job.status !== "COMPLETED" && (
-                  <form action={setStageStatus}>
+                  <form action={setStageStatus} className="flex items-center gap-1.5 flex-wrap">
                     <input type="hidden" name="stageId" value={stage.id} />
                     <input type="hidden" name="status" value="ACTIVE" />
+                    {stage.status === "PENDING" && !stage.dueAt && (
+                      <input
+                        type="date"
+                        name="dueAt"
+                        title="Task due date (optional — cannot be changed later)"
+                        className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-600"
+                      />
+                    )}
                     <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-blue-600 text-white active:bg-blue-700">
                       {stage.status === "PAUSED" ? "Resume" : "Start"}
                     </button>

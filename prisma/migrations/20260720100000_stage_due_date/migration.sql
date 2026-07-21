@@ -1,0 +1,1 @@
+ALTER TABLE "Stage" ADD COLUMN "dueAt" TIMESTAMP(3);

@@ -216,6 +216,9 @@ model Stage {
   status      StageStatus @default(PENDING)
   startedAt   DateTime?
   completedAt DateTime?
+  // Task due date, set when starting the stage. Write-once for supervisors;
+  // only admins can change it after it's entered.
+  dueAt       DateTime?
   // Quality check: who inspected the stage when it was marked Done.
   inspectedBy String?
   inspectedAt DateTime?
