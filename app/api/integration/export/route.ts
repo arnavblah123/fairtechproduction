@@ -55,8 +55,24 @@ export async function GET(req: NextRequest) {
     orderBy: { startedAt: "asc" },
   });
 
+  // Employee register with each worker's CURRENT unit (open transfer wins,
+  // else primary unit) — the inventory app mirrors its labour list from this.
+  const employees = await prisma.employee.findMany({
+    include: {
+      primaryUnit: { select: { code: true } },
+      transfers: { where: { toDate: null }, include: { toUnit: { select: { code: true } } }, take: 1 },
+    },
+  });
+
   return NextResponse.json({
     exportedAt: new Date().toISOString(),
+    employees: employees.map((e) => ({
+      code: e.code,
+      name: e.name,
+      skill: e.skill,
+      active: e.active,
+      unitCode: e.transfers[0]?.toUnit.code || e.primaryUnit.code,
+    })),
     timeLogs: workerLogs
       .filter((l) => jobNumberById.has(l.jobId!))
       .map((l) => ({

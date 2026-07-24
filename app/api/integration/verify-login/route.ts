@@ -23,9 +23,19 @@ export async function POST(req: NextRequest) {
   const password = String(body.password || "");
   if (!email || !password) return NextResponse.json({ ok: false });
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { units: { include: { unit: { select: { code: true } } } } },
+  });
   if (!user || !user.active || !(await bcrypt.compare(password, user.passwordHash))) {
     return NextResponse.json({ ok: false });
   }
-  return NextResponse.json({ ok: true, name: user.name, role: user.role, active: user.active });
+  return NextResponse.json({
+    ok: true,
+    name: user.name,
+    role: user.role,
+    active: user.active,
+    // SUPERADMIN sees all units; others are scoped to their assigned units
+    units: user.role === "SUPERADMIN" ? null : user.units.map((u) => u.unit.code),
+  });
 }
