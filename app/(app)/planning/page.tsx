@@ -26,7 +26,13 @@ export default async function PlanningPage() {
 
   const [plans, openJobs, backlog, units] = await Promise.all([
     db.plan.findMany({
+      // Supervisors/admins see their units' plans plus general (all-unit) ones.
+      where:
+        user.role === "SUPERADMIN"
+          ? {}
+          : { OR: [{ unitId: null }, { unitId: { in: user.unitIds } }] },
       include: {
+        unit: { select: { id: true, name: true, code: true } },
         items: {
           orderBy: { targetDate: "asc" },
           include: {
@@ -36,7 +42,7 @@ export default async function PlanningPage() {
         },
       },
       orderBy: { startDate: "desc" },
-      take: 10,
+      take: 30,
     }),
     db.job.findMany({
       where: { status: { not: "COMPLETED" } },
@@ -56,20 +62,35 @@ export default async function PlanningPage() {
   const now = Date.now();
   const isItemDone = (item: (typeof plans)[0]["items"][0]) =>
     item.done || item.stage?.status === "DONE";
-  const currentPlan =
-    plans.find((p) => p.startDate.getTime() <= now && now <= p.endDate.getTime() + DAY) ??
-    plans[0];
-  const pastPlans = plans.filter((p) => p.id !== currentPlan?.id);
 
-  const jobsForPicker = openJobs.map((j) => ({
-    id: j.id,
-    label: `${jobCode(j.jobNumber)} ${j.clientName} — ${j.description} (${j.unit.code})`,
-    stages: j.stages.map((s) => ({
-      id: s.id,
-      label: `${s.sequence}. ${s.name}`,
-      done: s.status === "DONE",
+  // Unit-wise grouping: each unit section shows its current plan and its
+  // past plans; plans without a unit go under "All units".
+  const visibleUnits = units.filter(
+    (u) => user.role === "SUPERADMIN" || user.unitIds.includes(u.id)
+  );
+  const covering = (p: (typeof plans)[0]) =>
+    p.startDate.getTime() <= now && now <= p.endDate.getTime() + DAY;
+  const groupsByUnit = [
+    ...visibleUnits.map((u) => ({
+      key: u.id as string | null,
+      title: u.name,
+      plans: plans.filter((p) => p.unitId === u.id),
     })),
-  }));
+    { key: null as string | null, title: "All units / general", plans: plans.filter((p) => !p.unitId) },
+  ];
+
+  const jobsForPicker = (unitId: string | null) =>
+    openJobs
+      .filter((j) => !unitId || j.unitId === unitId)
+      .map((j) => ({
+        id: j.id,
+        label: `${jobCode(j.jobNumber)} ${j.clientName} — ${j.description} (${j.unit.code})`,
+        stages: j.stages.map((s) => ({
+          id: s.id,
+          label: `${s.sequence}. ${s.name}`,
+          done: s.status === "DONE",
+        })),
+      }));
 
   function renderPlan(plan: typeof plans[0], isCurrent: boolean) {
     const doneCount = plan.items.filter(isItemDone).length;
@@ -178,7 +199,7 @@ export default async function PlanningPage() {
         {plan.items.length === 0 && (
           <p className="text-sm text-slate-400">No targets yet.</p>
         )}
-        {owner && <PlanItemForm planId={plan.id} jobs={jobsForPicker} />}
+        {owner && <PlanItemForm planId={plan.id} jobs={jobsForPicker(plan.unitId)} />}
       </section>
     );
   }
@@ -202,6 +223,15 @@ export default async function PlanningPage() {
           </summary>
           <form action={createPlan} className="px-4 pb-4 flex flex-wrap items-end gap-2 text-sm">
             <label className="block">
+              <span className="block text-xs text-slate-500 mb-0.5">Unit</span>
+              <select name="unitId" className="rounded-lg border border-slate-300 px-2 py-1.5">
+                {units.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+                <option value="">All units / general</option>
+              </select>
+            </label>
+            <label className="block">
               <span className="block text-xs text-slate-500 mb-0.5">Start</span>
               <input type="date" name="startDate" required className="rounded-lg border border-slate-300 px-2 py-1.5" />
             </label>
@@ -220,13 +250,37 @@ export default async function PlanningPage() {
         </details>
       )}
 
-      {currentPlan ? (
-        renderPlan(currentPlan, true)
-      ) : (
-        <p className="bg-white rounded-xl shadow-sm p-6 text-center text-slate-400 text-sm">
-          No plan yet{owner ? " — create the first plan above." : "."}
-        </p>
-      )}
+      {/* Unit-wise plans */}
+      {groupsByUnit.map((group) => {
+        if (group.plans.length === 0 && group.key === null) return null;
+        const current = group.plans.find(covering) ?? group.plans[0];
+        const past = group.plans.filter((p) => p.id !== current?.id);
+        return (
+          <div key={group.key ?? "general"} className="space-y-2">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500 px-1">
+              {group.title}
+            </h2>
+            {current ? (
+              renderPlan(current, covering(current))
+            ) : (
+              <p className="bg-white rounded-xl shadow-sm p-4 text-center text-slate-400 text-sm">
+                No plan for this unit yet
+                {owner ? " — create one above." : "."}
+              </p>
+            )}
+            {past.length > 0 && (
+              <details>
+                <summary className="cursor-pointer select-none text-xs font-medium text-slate-400 px-1">
+                  Past plans — {group.title} ({past.length})
+                </summary>
+                <div className="mt-2 space-y-3">
+                  {past.map((p) => renderPlan(p, false))}
+                </div>
+              </details>
+            )}
+          </div>
+        );
+      })}
 
       {/* Future jobs backlog */}
       <section className="bg-white rounded-xl shadow-sm p-4 space-y-3">
@@ -288,15 +342,6 @@ export default async function PlanningPage() {
         </form>
       </section>
 
-      {/* Past plans */}
-      {pastPlans.length > 0 && (
-        <details>
-          <summary className="cursor-pointer select-none text-sm font-medium text-slate-500 px-1">
-            Past plans ({pastPlans.length})
-          </summary>
-          <div className="mt-2 space-y-3">{pastPlans.map((p) => renderPlan(p, false))}</div>
-        </details>
-      )}
     </div>
   );
 }

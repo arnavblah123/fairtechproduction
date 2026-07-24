@@ -13,6 +13,7 @@ import { requireUser, requireRole, isAdmin } from "@/lib/permissions";
 
 export async function createPlan(formData: FormData) {
   const user = await requireRole("SUPERADMIN");
+  const unitId = String(formData.get("unitId") ?? "") || null;
   const startRaw = String(formData.get("startDate") ?? "");
   const endRaw = String(formData.get("endDate") ?? "");
   const notes = String(formData.get("notes") ?? "").trim() || null;
@@ -27,7 +28,7 @@ export async function createPlan(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim() || `Plan ${fmt(startDate)} – ${fmt(endDate)}`;
 
   const plan = await db.plan.create({
-    data: { name, startDate, endDate, notes, createdById: user.id },
+    data: { name, unitId, startDate, endDate, notes, createdById: user.id },
   });
   await audit(user.id, "plan.create", "Plan", plan.id, { name });
   revalidatePath("/planning");

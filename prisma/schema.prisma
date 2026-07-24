@@ -72,6 +72,7 @@ model Unit {
   disciplines  Discipline[]
   craneLogs    CraneLog[]
   futureJobs   FutureJob[]
+  plans        Plan[]
 }
 
 model Employee {
@@ -374,6 +375,9 @@ model Issue {
 model Plan {
   id          String     @id @default(cuid())
   name        String
+  // Unit this plan is for; null = all units / general.
+  unitId      String?
+  unit        Unit?      @relation(fields: [unitId], references: [id], onDelete: SetNull)
   startDate   DateTime
   endDate     DateTime
   notes       String?
