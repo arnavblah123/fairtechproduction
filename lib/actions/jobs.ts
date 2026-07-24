@@ -273,6 +273,21 @@ export async function setJobStatus(formData: FormData) {
   revalidatePath("/");
 }
 
+// Rank an upcoming (not started) job in the unit's queue — lower number
+// starts first. Any supervisor/admin with unit access can set it.
+export async function setJobRank(formData: FormData) {
+  const user = await requireUser();
+  const jobId = String(formData.get("jobId") ?? "");
+  const rank = Number(formData.get("rank"));
+  if (!Number.isInteger(rank) || rank < 1 || rank > 999) return;
+  const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
+  assertUnitAccess(user, job.unitId);
+  await db.job.update({ where: { id: jobId }, data: { priorityRank: rank } });
+  await audit(user.id, "job.rank", "Job", jobId, { rank });
+  revalidatePath("/");
+  revalidatePath("/jobs");
+}
+
 // Supervisor's Final Done: all production work on the job is finished.
 // Requires the estimated dispatch date, stops every clock on the job, and
 // moves it to Ready to Dispatch. The admin's Mark Completed remains the

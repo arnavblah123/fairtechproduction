@@ -13,6 +13,7 @@ type Props = {
   }[];
   clientNames: string[];
   buyerNames: string[];
+  prefill?: { clientName: string; description: string; unitId: string };
 };
 
 const STANDARD_TESTS = [
@@ -30,7 +31,7 @@ const inputCls =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-base";
 const labelCls = "block text-sm font-medium mb-1";
 
-export function JobCreateForm({ units, templates, clientNames, buyerNames }: Props) {
+export function JobCreateForm({ units, templates, clientNames, buyerNames, prefill }: Props) {
   const [state, action, pending] = useActionState(createJob, undefined);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [stagesText, setStagesText] = useState("");
@@ -93,7 +94,13 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames }: Pro
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Client name *</label>
-          <input name="clientName" required list="client-names" className={inputCls} />
+          <input
+            name="clientName"
+            required
+            list="client-names"
+            defaultValue={prefill?.clientName}
+            className={inputCls}
+          />
           <datalist id="client-names">
             {clientNames.map((n) => (
               <option key={n} value={n} />
@@ -115,7 +122,12 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames }: Pro
         </div>
         <div>
           <label className={labelCls}>Unit *</label>
-          <select name="unitId" required className={inputCls}>
+          <select
+            name="unitId"
+            required
+            defaultValue={prefill?.unitId || undefined}
+            className={inputCls}
+          >
             {units.map((u) => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
@@ -129,6 +141,7 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames }: Pro
           name="description"
           required
           list="equipment-names"
+          defaultValue={prefill?.description}
           onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder="e.g. Transformer Tank, APH, Bag Filter, Pressure Vessel"
           className={inputCls}

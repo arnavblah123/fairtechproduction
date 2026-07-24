@@ -9,7 +9,7 @@ import {
 import { LiveDuration } from "@/components/live-duration";
 import { formatDate, formatDateTime, jobCode, ACTIVITY_LABELS } from "@/lib/format";
 import { assignGeneralDuty, assignDispatchWorker, stopWorker } from "@/lib/actions/stages";
-import { setJobStatus } from "@/lib/actions/jobs";
+import { setJobStatus, setJobRank } from "@/lib/actions/jobs";
 import { isAdmin } from "@/lib/permissions";
 import { startCrane, stopCrane } from "@/lib/actions/crane";
 import { setShiftPlan } from "@/lib/actions/stages";
@@ -190,8 +190,17 @@ export default async function DashboardPage({
           .filter((u) => !unitFilter || u.id === unitFilter)
           .map((unit) => {
             const allUnitJobs = jobs.filter((j) => j.unitId === unit.id);
-            const unitJobs = allUnitJobs.filter((j) => j.status !== "READY_TO_DISPATCH");
+            const unitJobs = allUnitJobs.filter(
+              (j) => j.status !== "READY_TO_DISPATCH" && j.status !== "NOT_STARTED"
+            );
             const dispatchJobs = allUnitJobs.filter((j) => j.status === "READY_TO_DISPATCH");
+            const upcomingJobs = allUnitJobs
+              .filter((j) => j.status === "NOT_STARTED")
+              .sort(
+                (a, b) =>
+                  a.priorityRank - b.priorityRank ||
+                  a.expectedCompletion.getTime() - b.expectedCompletion.getTime()
+              );
             return (
               <section key={unit.id} className="bg-white rounded-xl shadow-sm">
                 <header className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
@@ -287,6 +296,49 @@ export default async function DashboardPage({
                     );
                   })}
                 </div>
+
+                {/* Upcoming: created but not started, ranked by priority */}
+                {upcomingJobs.length > 0 && (
+                  <div className="border-t-2 border-amber-200 bg-amber-50/50 px-4 py-3 space-y-1.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                      ⏭ Upcoming — priority order
+                    </p>
+                    {upcomingJobs.map((job, i) => (
+                      <div
+                        key={job.id}
+                        className="bg-white rounded-lg px-2.5 py-2 shadow-sm flex flex-wrap items-center gap-2 text-sm"
+                      >
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-600 text-white text-xs font-bold">
+                          {i + 1}
+                        </span>
+                        <Link href={`/jobs/${job.id}`} className="font-medium hover:underline min-w-0">
+                          {job.clientName}
+                          <span className="text-slate-400 font-normal text-xs ml-1">
+                            {jobCode(job.jobNumber)}
+                          </span>
+                        </Link>
+                        <span className="text-xs text-slate-500 whitespace-nowrap">
+                          due {formatDate(job.expectedCompletion)}
+                        </span>
+                        <form action={setJobRank} className="ml-auto flex items-center gap-1">
+                          <input type="hidden" name="jobId" value={job.id} />
+                          <input
+                            type="number"
+                            name="rank"
+                            min={1}
+                            max={999}
+                            defaultValue={job.priorityRank}
+                            title="Priority rank — lower starts first"
+                            className="w-14 rounded border border-amber-200 px-1.5 py-1 text-xs"
+                          />
+                          <button className="rounded bg-amber-600 text-white px-1.5 py-1 text-xs" title="Save rank">
+                            ✓
+                          </button>
+                        </form>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Ready to Dispatch: finished jobs awaiting the truck */}
                 {dispatchJobs.length > 0 && (

@@ -54,8 +54,13 @@ function vevent(
   return lines.join("\r\n");
 }
 
-export function buildOwnerCalendar(jobs: FeedJob[]): string {
+type PlanTarget = { id: string; targetDate: Date; summary: string };
+
+export function buildOwnerCalendar(jobs: FeedJob[], planTargets: PlanTarget[] = []): string {
   const events: string[] = [];
+  for (const t of planTargets) {
+    events.push(vevent(`plan-${t.id}`, t.targetDate, t.summary, "10-day planning target.", 1));
+  }
   for (const j of jobs) {
     const code = jobCode(j.jobNumber);
     events.push(

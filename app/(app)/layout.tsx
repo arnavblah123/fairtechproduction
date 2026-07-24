@@ -18,11 +18,12 @@ export default async function AppLayout({
     ...(isAdmin ? [{ href: "/templates", label: "Templates" }] : []),
     { href: "/employees", label: "Employees" },
     { href: "/issues", label: "Issues" },
+    { href: "/planning", label: "Planning" },
     { href: "/history", label: "History" },
     { href: "/discipline", label: "Discipline" },
     { href: "/attendance", label: "Attendance" },
     ...(isAdmin ? [{ href: "/users", label: "Users" }] : []),
-    ...(user.role === "SUPERADMIN" ? [{ href: "/planner", label: "Planner" }] : []),
+    ...(user.role === "SUPERADMIN" ? [{ href: "/planner", label: "Scorecard" }] : []),
     ...(user.role === "SUPERADMIN" ? [{ href: "/audit", label: "Audit" }] : []),
   ];
 

@@ -41,6 +41,8 @@ model User {
   disciplines    Discipline[]    @relation("DisciplineRaisedBy")
   cranesStarted  CraneLog[]      @relation("CraneStartedBy")
   cranesEnded    CraneLog[]      @relation("CraneEndedBy")
+  plansCreated   Plan[]          @relation("PlanCreatedBy")
+  futureJobsAdded FutureJob[]    @relation("FutureJobAddedBy")
 }
 
 model UserUnit {
@@ -69,6 +71,7 @@ model Unit {
   transfersOut UnitTransfer[] @relation("TransferFrom")
   disciplines  Discipline[]
   craneLogs    CraneLog[]
+  futureJobs   FutureJob[]
 }
 
 model Employee {
@@ -154,6 +157,7 @@ model Job {
   reminderDaysBefore Int       @default(7)
   status             JobStatus @default(NOT_STARTED)
   priority           Boolean   @default(false)
+  priorityRank       Int       @default(100) // order in the Upcoming queue; lower = start first
   completedAt        DateTime? // set when status moves to COMPLETED, cleared if reopened
   estimatedDispatchAt DateTime? // given by the supervisor at Final Done
   googleEventId      String? // Google Calendar event backing the deadline reminder
@@ -170,6 +174,7 @@ model Job {
   attachments JobAttachment[]
   reworks     StageRework[]
   tests       JobTest[]
+  planItems   PlanItem[]
 
   @@index([unitId, status])
 }
@@ -223,9 +228,10 @@ model Stage {
   inspectedBy String?
   inspectedAt DateTime?
 
-  timeLogs TimeLog[]
-  reworks  StageRework[]
-  tests    JobTest[]
+  timeLogs  TimeLog[]
+  reworks   StageRework[]
+  tests     JobTest[]
+  planItems PlanItem[]
 
   @@index([jobId])
 }
@@ -359,6 +365,57 @@ model Issue {
 
   @@index([unitId, status])
   @@index([jobId, status])
+}
+
+// ---------- 10-day production planning ----------
+
+// A planning window (normally 10 days). Created by the superadmin;
+// supervisors see it read-only.
+model Plan {
+  id          String     @id @default(cuid())
+  name        String
+  startDate   DateTime
+  endDate     DateTime
+  notes       String?
+  createdById String
+  createdBy   User       @relation("PlanCreatedBy", fields: [createdById], references: [id])
+  items       PlanItem[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+// One target inside a plan: "this stage of this job must be done by this
+// date". Stage-linked items auto-complete when the stage is marked Done;
+// free-text items are ticked manually.
+model PlanItem {
+  id          String    @id @default(cuid())
+  planId      String
+  plan        Plan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  jobId       String?
+  job         Job?      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  stageId     String?
+  stage       Stage?    @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  description String
+  targetDate  DateTime
+  done        Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@index([planId])
+}
+
+// Upcoming work not yet created as a job — supervisors add these so the
+// 10-day planning can account for them.
+model FutureJob {
+  id            String    @id @default(cuid())
+  clientName    String
+  description   String
+  unitId        String?
+  unit          Unit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  expectedStart DateTime?
+  notes         String?
+  addedById     String
+  addedBy       User      @relation("FutureJobAddedBy", fields: [addedById], references: [id])
+  createdAt     DateTime  @default(now())
 }
 
 // ---------- Discipline (hour cuts) ----------

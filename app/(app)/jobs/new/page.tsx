@@ -4,8 +4,13 @@ import { JobCreateForm } from "@/components/job-create-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewJobPage() {
+export default async function NewJobPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ client?: string; desc?: string; unit?: string }>;
+}) {
   const user = await requireUser();
+  const { client, desc, unit } = await searchParams;
   const [units, templates, clients, buyers] = await Promise.all([
     db.unit.findMany({
       where: user.role === "SUPERADMIN" ? {} : { id: { in: user.unitIds } },
@@ -57,6 +62,11 @@ export default async function NewJobPage() {
         }))}
         clientNames={clients.map((c) => c.clientName)}
         buyerNames={buyers.map((b) => b.buyerName!).filter(Boolean)}
+        prefill={{
+          clientName: client ?? "",
+          description: desc ?? "",
+          unitId: unit ?? "",
+        }}
       />
     </div>
   );

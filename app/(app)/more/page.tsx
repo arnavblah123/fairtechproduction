@@ -11,12 +11,13 @@ export default async function MorePage() {
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
 
   const links = [
+    { href: "/planning", label: "10-Day Planning", icon: "🗓️" },
     { href: "/history", label: "Completed Job History", icon: "📊" },
     { href: "/discipline", label: "Discipline Register", icon: "⚠️" },
     ...(isAdmin ? [{ href: "/templates", label: "Process Templates", icon: "📋" }] : []),
     ...(isAdmin ? [{ href: "/users", label: "Users", icon: "👤" }] : []),
     { href: "/attendance", label: "Attendance Events", icon: "🕐" },
-    ...(user.role === "SUPERADMIN" ? [{ href: "/planner", label: "Owner's Planner", icon: "📅" }] : []),
+    ...(user.role === "SUPERADMIN" ? [{ href: "/planner", label: "Owner's Scorecard", icon: "📅" }] : []),
     ...(user.role === "SUPERADMIN" ? [{ href: "/audit", label: "Audit Trail", icon: "🔍" }] : []),
     { href: "/account", label: "My Account & Password", icon: "⚙️" },
   ];

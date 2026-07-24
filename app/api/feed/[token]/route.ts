@@ -14,11 +14,26 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const jobs = await db.job.findMany({
-    where: { status: { not: "COMPLETED" } },
-    include: { unit: { select: { name: true } } },
-    orderBy: { expectedCompletion: "asc" },
-  });
+  const [jobs, planItems] = await Promise.all([
+    db.job.findMany({
+      where: { status: { not: "COMPLETED" } },
+      include: { unit: { select: { name: true } } },
+      orderBy: { expectedCompletion: "asc" },
+    }),
+    // Plan targets from recent plans that aren't finished yet.
+    db.planItem.findMany({
+      where: {
+        done: false,
+        plan: { endDate: { gte: new Date(Date.now() - 30 * 86400000) } },
+        OR: [{ stageId: null }, { stage: { status: { not: "DONE" } } }],
+      },
+      include: {
+        job: { select: { jobNumber: true, clientName: true } },
+        stage: { select: { sequence: true } },
+      },
+      orderBy: { targetDate: "asc" },
+    }),
+  ]);
 
   const ics = buildOwnerCalendar(
     jobs.map((j) => ({
@@ -30,6 +45,13 @@ export async function GET(
       expectedCompletion: j.expectedCompletion,
       reminderDaysBefore: j.reminderDaysBefore,
       estimatedDispatchAt: j.estimatedDispatchAt,
+    })),
+    planItems.map((i) => ({
+      id: i.id,
+      targetDate: i.targetDate,
+      summary: `📋 Plan: ${i.stage ? `${i.stage.sequence}. ` : ""}${i.description}${
+        i.job ? ` — ${i.job.clientName}` : ""
+      }`,
     }))
   );
 
