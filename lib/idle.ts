@@ -55,6 +55,42 @@ export function jobSpanBreakdown(
   };
 }
 
+// Cumulative actively-worked time for one stage (or any set of logs): the
+// union of the logs' intervals, with open logs counted up to `now`. Gaps
+// where nobody was clocked on (idle) are never included, and overlapping
+// workers don't double-count — 3 people for 1 hour = 1 hour of wall time.
+export function workedMinutes(logs: LogLike[], now: Date = new Date()): number {
+  return unionMinutes(
+    logs.map((l) => ({ start: l.startedAt, end: l.endedAt ?? now }))
+  );
+}
+
+// Group logs by stage and compute each stage's worked total in one pass.
+export function workedByStage(
+  logs: ({ stageId: string | null } & LogLike)[],
+  now: Date = new Date()
+): Map<string, number> {
+  const byStage = new Map<string, LogLike[]>();
+  for (const l of logs) {
+    if (!l.stageId) continue;
+    const arr = byStage.get(l.stageId);
+    if (arr) arr.push(l);
+    else byStage.set(l.stageId, [l]);
+  }
+  const out = new Map<string, number>();
+  for (const [stageId, list] of byStage) out.set(stageId, workedMinutes(list, now));
+  return out;
+}
+
+export function fmtWorked(minutes: number): string {
+  const mins = Math.floor(minutes);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
 export function fmtIdle(minutes: number): string {
   if (minutes < 60) return `${Math.round(minutes)}m`;
   const h = minutes / 60;

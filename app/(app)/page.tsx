@@ -14,6 +14,7 @@ import { isAdmin } from "@/lib/permissions";
 import { startCrane, stopCrane } from "@/lib/actions/crane";
 import { setShiftPlan } from "@/lib/actions/stages";
 import { closeOverdueShifts, shiftPlanLabel } from "@/lib/shift";
+import { workedByStage, fmtWorked } from "@/lib/idle";
 import type { JobStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -89,6 +90,14 @@ export default async function DashboardPage({
       select: { id: true, name: true, skill: true, primaryUnitId: true },
     }),
   ]);
+
+  // Total actively-worked time per stage (all sessions, idle gaps excluded)
+  // so a restarted stage still shows its full running total.
+  const allStageLogs = await db.timeLog.findMany({
+    where: { jobId: { in: jobs.map((j) => j.id) }, stageId: { not: null } },
+    select: { stageId: true, startedAt: true, endedAt: true },
+  });
+  const stageWorked = workedByStage(allStageLogs);
 
   const activeWorkerCount = new Set([
     ...jobs.flatMap((j) => j.timeLogs.map((t) => t.employeeId)),
@@ -269,6 +278,11 @@ export default async function DashboardPage({
                                   {" "}since {formatDateTime(activeStage.startedAt)}
                                 </span>
                               )}
+                              {stageWorked.has(activeStage.id) && (
+                                <span className="text-blue-700">
+                                  {" "}· ⏱ {fmtWorked(stageWorked.get(activeStage.id)!)} worked
+                                </span>
+                              )}
                             </>
                           )}
                         </p>
@@ -285,8 +299,21 @@ export default async function DashboardPage({
                                     on {log.stage?.name ?? ACTIVITY_LABELS[log.activity] ?? "—"}
                                   </span>
                                 </span>
-                                <span className="font-medium">
+                                <span className="text-right font-medium">
                                   <LiveDuration since={log.startedAt} />
+                                  {log.stageId && stageWorked.has(log.stageId) && (
+                                    <span className="block text-[10px] font-normal text-blue-500 whitespace-nowrap">
+                                      stage total{" "}
+                                      <LiveDuration
+                                        since={
+                                          new Date(
+                                            Date.now() -
+                                              Math.round(stageWorked.get(log.stageId)! * 60000)
+                                          )
+                                        }
+                                      />
+                                    </span>
+                                  )}
                                 </span>
                               </li>
                             ))}

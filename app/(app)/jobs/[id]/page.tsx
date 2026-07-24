@@ -20,6 +20,7 @@ import { AttachmentUpload } from "@/components/attachment-upload";
 import { QuickAddEmployee } from "@/components/quick-add-employee";
 import { deleteAttachment } from "@/lib/actions/attachments";
 import { ATTACHMENT_KIND_LABELS, formatFileSize } from "@/lib/attachments";
+import { workedByStage, fmtWorked } from "@/lib/idle";
 
 export const dynamic = "force-dynamic";
 
@@ -100,6 +101,14 @@ export default async function JobPage({
       })
     ),
   ].filter((g) => g.list.length > 0);
+
+  // Total actively-worked time per stage across every session — survives
+  // pause/restart/rework and never counts idle gaps between sessions.
+  const allStageLogs = await db.timeLog.findMany({
+    where: { jobId: id, stageId: { not: null } },
+    select: { stageId: true, startedAt: true, endedAt: true },
+  });
+  const stageWorked = workedByStage(allStageLogs);
 
   const openIssues = job.issues.filter((i) => i.status === "OPEN");
   const totalReworks = job.stages.reduce((n, s) => n + s.reworks.length, 0);
@@ -664,6 +673,22 @@ export default async function JobPage({
                       </>
                     )
                   )}
+                </p>
+              )}
+
+              {/* Total time actually worked on this stage — adds up across
+                  every start/pause/restart, idle gaps not counted */}
+              {stageWorked.has(stage.id) && (
+                <p className="text-xs font-semibold text-blue-800 leading-snug">
+                  ⏱ Total worked:{" "}
+                  {stage.timeLogs.length > 0 ? (
+                    <LiveDuration
+                      since={new Date(Date.now() - Math.round(stageWorked.get(stage.id)! * 60000))}
+                    />
+                  ) : (
+                    fmtWorked(stageWorked.get(stage.id)!)
+                  )}
+                  <span className="font-normal text-slate-400"> · idle not counted</span>
                 </p>
               )}
 
