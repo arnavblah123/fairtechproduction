@@ -367,9 +367,9 @@ model Issue {
   @@index([jobId, status])
 }
 
-// ---------- 10-day production planning ----------
+// ---------- Production planning ----------
 
-// A planning window (normally 10 days). Created by the superadmin;
+// A planning window (any date range). Created by the superadmin;
 // supervisors see it read-only.
 model Plan {
   id          String     @id @default(cuid())

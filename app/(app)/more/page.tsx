@@ -11,7 +11,7 @@ export default async function MorePage() {
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
 
   const links = [
-    { href: "/planning", label: "10-Day Planning", icon: "🗓️" },
+    { href: "/planning", label: "Production Planning", icon: "🗓️" },
     { href: "/history", label: "Completed Job History", icon: "📊" },
     { href: "/discipline", label: "Discipline Register", icon: "⚠️" },
     ...(isAdmin ? [{ href: "/templates", label: "Process Templates", icon: "📋" }] : []),

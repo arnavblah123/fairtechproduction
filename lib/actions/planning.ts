@@ -6,7 +6,7 @@ import { audit } from "@/lib/audit";
 import { requireUser, requireRole, isAdmin } from "@/lib/permissions";
 
 // ---------------------------------------------------------------------------
-// 10-day production planning. Plans and their targets are superadmin-only to
+// Production planning (any date range). Plans and targets are superadmin-only to
 // write; everyone can view. Supervisors contribute by adding future jobs to
 // the backlog.
 // ---------------------------------------------------------------------------

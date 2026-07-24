@@ -14,7 +14,7 @@ import { formatDate, jobCode } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-// 10-day production planning. Superadmin plans; everyone sees the targets;
+// Production planning (any date range). Superadmin plans; everyone sees the targets;
 // supervisors add upcoming work to the backlog.
 
 const DAY = 86400000;
@@ -186,7 +186,7 @@ export default async function PlanningPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-bold">10-Day Planning</h1>
+        <h1 className="text-xl font-bold">Production Planning</h1>
         {!owner && (
           <span className="text-xs text-slate-500">
             Planning is set by management — check your unit&apos;s targets daily.
@@ -198,7 +198,7 @@ export default async function PlanningPage() {
       {owner && (
         <details className="bg-white rounded-xl shadow-sm">
           <summary className="cursor-pointer select-none px-4 py-3 font-semibold text-indigo-700">
-            + New 10-day plan
+            + New plan
           </summary>
           <form action={createPlan} className="px-4 pb-4 flex flex-wrap items-end gap-2 text-sm">
             <label className="block">
@@ -206,8 +206,8 @@ export default async function PlanningPage() {
               <input type="date" name="startDate" required className="rounded-lg border border-slate-300 px-2 py-1.5" />
             </label>
             <label className="block">
-              <span className="block text-xs text-slate-500 mb-0.5">End (default +9 days)</span>
-              <input type="date" name="endDate" className="rounded-lg border border-slate-300 px-2 py-1.5" />
+              <span className="block text-xs text-slate-500 mb-0.5">End</span>
+              <input type="date" name="endDate" required className="rounded-lg border border-slate-300 px-2 py-1.5" />
             </label>
             <label className="block flex-1 min-w-40">
               <span className="block text-xs text-slate-500 mb-0.5">Notes (optional)</span>
@@ -224,7 +224,7 @@ export default async function PlanningPage() {
         renderPlan(currentPlan, true)
       ) : (
         <p className="bg-white rounded-xl shadow-sm p-6 text-center text-slate-400 text-sm">
-          No plan yet{owner ? " — create the first 10-day plan above." : "."}
+          No plan yet{owner ? " — create the first plan above." : "."}
         </p>
       )}
 
