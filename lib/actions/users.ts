@@ -85,6 +85,35 @@ export async function setUserUnits(formData: FormData) {
   revalidatePath("/users");
 }
 
+// Superadmin full edit: rename, change email, reset password — for any
+// account, including the superadmin's own row.
+export async function updateUserProfile(formData: FormData) {
+  const actor = await requireUser();
+  if (actor.role !== "SUPERADMIN") throw new Error("Only the superadmin can edit user details.");
+  const userId = String(formData.get("userId") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const password = String(formData.get("password") ?? "");
+  if (!name || !email) throw new Error("Name and email are required.");
+  if (password && password.length < 8) throw new Error("Password must be at least 8 characters.");
+  const clash = await db.user.findUnique({ where: { email } });
+  if (clash && clash.id !== userId) throw new Error("Another user already has that email.");
+  await db.user.update({
+    where: { id: userId },
+    data: {
+      name,
+      email,
+      ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
+    },
+  });
+  await audit(actor.id, "user.edit", "User", userId, {
+    name,
+    email,
+    passwordReset: Boolean(password),
+  });
+  revalidatePath("/users");
+}
+
 export async function setUserActive(formData: FormData) {
   const actor = await requireUser();
   const userId = String(formData.get("userId") ?? "");

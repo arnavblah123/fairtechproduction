@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/permissions";
-import { updateUserRole, setUserActive, setUserUnits } from "@/lib/actions/users";
+import { updateUserRole, setUserActive, setUserUnits, updateUserProfile } from "@/lib/actions/users";
 import { UserCreateForm } from "@/components/user-create-form";
 import { RoleBadge } from "@/components/badges";
 
@@ -77,8 +77,57 @@ export default async function UsersPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    {manageable && (
-                      <div className="flex gap-1.5 items-center flex-wrap">
+                    <div className="flex gap-1.5 items-center flex-wrap">
+                      {/* Superadmin: everything editable — name, email, password reset */}
+                      {actor.role === "SUPERADMIN" && (
+                        <details className="w-full">
+                          <summary className="cursor-pointer select-none rounded bg-slate-100 px-2 py-1 text-xs inline-block">
+                            ✏️ Edit
+                          </summary>
+                          <form
+                            action={updateUserProfile}
+                            className="mt-2 flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-2"
+                          >
+                            <input type="hidden" name="userId" value={u.id} />
+                            <label className="text-xs">
+                              <span className="block text-[10px] text-slate-500 mb-0.5">Name</span>
+                              <input
+                                name="name"
+                                defaultValue={u.name}
+                                required
+                                className="w-36 rounded border border-slate-300 px-2 py-1"
+                              />
+                            </label>
+                            <label className="text-xs">
+                              <span className="block text-[10px] text-slate-500 mb-0.5">Email (login)</span>
+                              <input
+                                name="email"
+                                type="email"
+                                defaultValue={u.email}
+                                required
+                                className="w-48 rounded border border-slate-300 px-2 py-1"
+                              />
+                            </label>
+                            <label className="text-xs">
+                              <span className="block text-[10px] text-slate-500 mb-0.5">
+                                New password (blank = keep current)
+                              </span>
+                              <input
+                                name="password"
+                                type="text"
+                                minLength={8}
+                                placeholder="min 8 characters"
+                                className="w-40 rounded border border-slate-300 px-2 py-1"
+                              />
+                            </label>
+                            <button className="rounded bg-slate-900 text-white px-2.5 py-1 text-xs">
+                              Save
+                            </button>
+                          </form>
+                        </details>
+                      )}
+                      {manageable && (
+                        <>
                         {actor.role === "SUPERADMIN" && (
                           <form action={updateUserRole} className="flex gap-1">
                             <input type="hidden" name="userId" value={u.id} />
@@ -102,8 +151,9 @@ export default async function UsersPage() {
                             {u.active ? "Deactivate" : "Activate"}
                           </button>
                         </form>
-                      </div>
-                    )}
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
