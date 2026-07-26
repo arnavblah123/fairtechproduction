@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { requireUser, isAdmin } from "@/lib/permissions";
-import { transferEmployee, setEmployeeActive, setBiometricId } from "@/lib/actions/employees";
+import { transferEmployee, setEmployeeActive, setBiometricId, setEmployeeWage } from "@/lib/actions/employees";
 import { QuickAddEmployee } from "@/components/quick-add-employee";
 import { DisciplineForm } from "@/components/discipline-form";
 import { LiveDuration } from "@/components/live-duration";
@@ -90,6 +90,7 @@ export default async function EmployeesPage({
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Code</th>
               <th className="px-4 py-3">Bio #</th>
+              {user.role === "SUPERADMIN" && <th className="px-4 py-3">₹/hr</th>}
               <th className="px-4 py-3">Skill</th>
               <th className="px-4 py-3">Unit</th>
               <th className="px-4 py-3">Working on now</th>
@@ -123,6 +124,26 @@ export default async function EmployeesPage({
                     </button>
                   </form>
                 </td>
+                {user.role === "SUPERADMIN" && (
+                  <td className="px-4 py-3">
+                    <form action={setEmployeeWage} className="flex gap-1">
+                      <input type="hidden" name="employeeId" value={emp.id} />
+                      <input
+                        name="hourlyWage"
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        defaultValue={emp.hourlyWage ?? ""}
+                        placeholder="—"
+                        className="w-16 rounded border border-slate-200 px-1.5 py-1 text-xs"
+                        title="Hourly wage in ₹ — only you see this; used for per-job labour cost"
+                      />
+                      <button className="rounded bg-slate-100 px-1.5 py-1 text-xs" title="Save wage">
+                        ✓
+                      </button>
+                    </form>
+                  </td>
+                )}
                 <td className="px-4 py-3">{emp.skill}</td>
                 <td className="px-4 py-3 whitespace-nowrap">{emp.primaryUnit.name}</td>
                 <td className="px-4 py-3">
@@ -202,7 +223,7 @@ export default async function EmployeesPage({
             ))}
             {employees.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
                   No employees found.
                 </td>
               </tr>

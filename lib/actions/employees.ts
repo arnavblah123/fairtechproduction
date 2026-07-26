@@ -118,6 +118,22 @@ export async function setBiometricId(formData: FormData) {
   revalidatePath("/employees");
 }
 
+// Hourly wage — owner only. Drives the per-job labour cost figures, which
+// are likewise shown only to the owner.
+export async function setEmployeeWage(formData: FormData) {
+  const user = await requireUser();
+  if (user.role !== "SUPERADMIN") throw new Error("Only the owner can set wages.");
+  const employeeId = String(formData.get("employeeId") ?? "");
+  const raw = String(formData.get("hourlyWage") ?? "").trim();
+  const hourlyWage = raw === "" ? null : Number(raw);
+  if (hourlyWage !== null && (isNaN(hourlyWage) || hourlyWage < 0 || hourlyWage > 100000)) {
+    throw new Error("Enter a valid hourly wage in rupees.");
+  }
+  await db.employee.update({ where: { id: employeeId }, data: { hourlyWage } });
+  await audit(user.id, "employee.wage", "Employee", employeeId, { hourlyWage });
+  revalidatePath("/employees");
+}
+
 export async function setEmployeeActive(formData: FormData) {
   const user = await requireUser();
   if (!isAdmin(user)) throw new Error("Not allowed");

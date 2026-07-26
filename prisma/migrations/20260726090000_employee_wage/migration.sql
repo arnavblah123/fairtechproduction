@@ -1,0 +1,1 @@
+ALTER TABLE "Employee" ADD COLUMN "hourlyWage" DOUBLE PRECISION;

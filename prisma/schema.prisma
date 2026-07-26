@@ -82,6 +82,7 @@ model Employee {
   biometricId   String? @unique // enrollment number (PIN) in the biometric machine
   skill         String // welder, fitter, helper, ...
   contact       String?
+  hourlyWage    Float? // ₹ per hour — set and seen by the owner only, drives per-job labour cost
   primaryUnitId String
   primaryUnit   Unit    @relation(fields: [primaryUnitId], references: [id])
   active        Boolean @default(true)
