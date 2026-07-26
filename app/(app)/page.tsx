@@ -15,6 +15,8 @@ import { startCrane, stopCrane } from "@/lib/actions/crane";
 import { setShiftPlan } from "@/lib/actions/stages";
 import { closeOverdueShifts, shiftPlanLabel } from "@/lib/shift";
 import { workedByStage, fmtWorked } from "@/lib/idle";
+import { punchInDay } from "@/lib/actions/punch";
+import { istToday } from "@/lib/overheads";
 import type { JobStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +48,17 @@ export default async function DashboardPage({
     where: user.role === "SUPERADMIN" ? {} : { id: { in: user.unitIds } },
     orderBy: { name: "asc" },
   });
+
+  // Daily punch-in: supervisors/admins mark which unit they're at today.
+  // Blocks the dashboard until done — like the worker-shift popup.
+  const todayPunch =
+    user.role === "SUPERADMIN"
+      ? null
+      : await db.supervisorDay.findUnique({
+          where: { userId_date: { userId: user.id, date: istToday() } },
+          include: { unit: { select: { name: true } } },
+        });
+  const needsPunch = user.role !== "SUPERADMIN" && !todayPunch && units.length > 0;
 
   const jobs = await db.job.findMany({
     where: {
@@ -128,9 +141,34 @@ export default async function DashboardPage({
 
   return (
     <div className="space-y-4">
+      {/* Blocking daily punch-in for supervisors/admins */}
+      {needsPunch && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <section className="bg-white rounded-xl shadow-2xl p-5 w-full max-w-sm space-y-3">
+            <h2 className="text-lg font-bold text-center">👋 Punch in your day</h2>
+            <p className="text-sm text-slate-600 text-center">
+              Which unit are you working at today?
+            </p>
+            {units.map((u) => (
+              <form key={u.id} action={punchInDay}>
+                <input type="hidden" name="unitId" value={u.id} />
+                <button className="w-full rounded-lg bg-blue-600 text-white px-4 py-3 font-semibold hover:bg-blue-700 active:bg-blue-800">
+                  I&apos;m at {u.name} today
+                </button>
+              </form>
+            ))}
+          </section>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold">Production Dashboard</h1>
         <div className="flex gap-2 text-sm">
+          {todayPunch && (
+            <span className="bg-green-100 text-green-800 rounded-lg px-3 py-1.5 shadow-sm whitespace-nowrap">
+              ✓ Punched in — {todayPunch.unit.name}
+            </span>
+          )}
           <span className="bg-white rounded-lg px-3 py-1.5 shadow-sm">
             <b>{jobs.length}</b> jobs shown
           </span>

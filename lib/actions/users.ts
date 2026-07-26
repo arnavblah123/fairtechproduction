@@ -114,6 +114,25 @@ export async function updateUserProfile(formData: FormData) {
   revalidatePath("/users");
 }
 
+// Monthly salary — owner only. Drives the per-job overheads: each punched-in
+// day costs salary/30, spread over that unit's running jobs.
+export async function setUserSalary(formData: FormData) {
+  const actor = await requireUser();
+  if (actor.role !== "SUPERADMIN") throw new Error("Only the owner can set salaries.");
+  const userId = String(formData.get("userId") ?? "");
+  const raw = String(formData.get("monthlySalary") ?? "").trim();
+  const monthlySalary = raw === "" ? null : Number(raw);
+  if (
+    monthlySalary !== null &&
+    (isNaN(monthlySalary) || monthlySalary < 0 || monthlySalary > 10000000)
+  ) {
+    throw new Error("Enter a valid monthly salary in rupees.");
+  }
+  await db.user.update({ where: { id: userId }, data: { monthlySalary } });
+  await audit(actor.id, "user.salary", "User", userId, { monthlySalary });
+  revalidatePath("/users");
+}
+
 export async function setUserActive(formData: FormData) {
   const actor = await requireUser();
   const userId = String(formData.get("userId") ?? "");

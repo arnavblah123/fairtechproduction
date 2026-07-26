@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/permissions";
-import { updateUserRole, setUserActive, setUserUnits, updateUserProfile } from "@/lib/actions/users";
+import { updateUserRole, setUserActive, setUserUnits, updateUserProfile, setUserSalary } from "@/lib/actions/users";
 import { UserCreateForm } from "@/components/user-create-form";
 import { RoleBadge } from "@/components/badges";
 
@@ -33,6 +33,7 @@ export default async function UsersPage() {
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Role</th>
               <th className="px-4 py-3">Units</th>
+              {actor.role === "SUPERADMIN" && <th className="px-4 py-3">Salary ₹/mo</th>}
               <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
@@ -76,6 +77,30 @@ export default async function UsersPage() {
                       u.units.map((x) => x.unit.name).join(", ") || "—"
                     )}
                   </td>
+                  {actor.role === "SUPERADMIN" && (
+                    <td className="px-4 py-3">
+                      {u.role !== "SUPERADMIN" ? (
+                        <form action={setUserSalary} className="flex gap-1">
+                          <input type="hidden" name="userId" value={u.id} />
+                          <input
+                            name="monthlySalary"
+                            type="number"
+                            step="1"
+                            min={0}
+                            defaultValue={u.monthlySalary ?? ""}
+                            placeholder="—"
+                            className="w-20 rounded border border-slate-200 px-1.5 py-1 text-xs"
+                            title="Monthly salary in ₹ — only you see this; ÷30 becomes the daily overhead spread over that unit's running jobs"
+                          />
+                          <button className="rounded bg-slate-100 px-1.5 py-1 text-xs" title="Save salary">
+                            ✓
+                          </button>
+                        </form>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <div className="flex gap-1.5 items-center flex-wrap">
                       {/* Superadmin: everything editable — name, email, password reset */}

@@ -22,6 +22,7 @@ import { deleteAttachment } from "@/lib/actions/attachments";
 import { ATTACHMENT_KIND_LABELS, formatFileSize } from "@/lib/attachments";
 import { workedByStage, fmtWorked } from "@/lib/idle";
 import { formatMoney } from "@/lib/format";
+import { overheadByJob } from "@/lib/overheads";
 
 export const dynamic = "force-dynamic";
 
@@ -138,6 +139,10 @@ export default async function JobPage({
   );
   const labourCost = workerCosts.reduce((s, w) => s + (w.wage ?? 0) * (w.minutes / 60), 0);
   const unpricedCount = workerCosts.filter((w) => w.wage === null).length;
+  // Supervisor-salary overheads: punched-in days ÷ 30, split over the unit's
+  // jobs running each day.
+  const overheads =
+    user.role === "SUPERADMIN" ? (await overheadByJob([id])).get(id) ?? 0 : 0;
 
   const openIssues = job.issues.filter((i) => i.status === "OPEN");
   const totalReworks = job.stages.reduce((n, s) => n + s.reworks.length, 0);
@@ -297,10 +302,13 @@ export default async function JobPage({
             </dl>
 
             {/* Labour cost — visible to the owner only */}
-            {user.role === "SUPERADMIN" && workerCosts.length > 0 && (
+            {user.role === "SUPERADMIN" && (workerCosts.length > 0 || overheads > 0) && (
               <details className="mt-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm max-w-xl">
                 <summary className="cursor-pointer select-none font-semibold text-emerald-900">
-                  💰 Labour cost so far: {formatMoney(labourCost)}
+                  💰 Cost so far: {formatMoney(labourCost + overheads)}
+                  <span className="font-normal">
+                    {" "}(labour {formatMoney(labourCost)} + overheads {formatMoney(overheads)})
+                  </span>
                   {unpricedCount > 0 && (
                     <span className="font-normal text-amber-700">
                       {" "}· {unpricedCount} worker{unpricedCount === 1 ? "" : "s"} without wage set
@@ -335,8 +343,16 @@ export default async function JobPage({
                     ))}
                   </tbody>
                 </table>
+                {overheads > 0 && (
+                  <p className="mt-1.5 pt-1.5 border-t border-emerald-100 text-xs flex justify-between">
+                    <span>Supervisor overheads</span>
+                    <span className="font-medium">{formatMoney(overheads)}</span>
+                  </p>
+                )}
                 <p className="mt-1.5 text-[11px] text-emerald-700">
-                  Only you can see this. Wages are set per worker on the Employees page.
+                  Only you can see this. Wages are per worker on the Employees page;
+                  overheads are punched-in supervisors&apos; salary ÷ 30, split over the
+                  unit&apos;s jobs running that day.
                 </p>
               </details>
             )}

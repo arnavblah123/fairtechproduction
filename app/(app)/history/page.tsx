@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireUser, unitScope } from "@/lib/permissions";
 import { formatDate, formatMoney, jobCode } from "@/lib/format";
 import { jobSpanBreakdown, fmtIdle } from "@/lib/idle";
+import { overheadByJob } from "@/lib/overheads";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ type HistoryRow = {
   idleMinutes: number | null; // gap time with nobody clocked on, within the span
   daysLate: number; // negative = finished early
   labourCost: number | null; // owner only — hours × each worker's hourly wage
+  overheads: number | null; // owner only — supervisor salary share of this job's days
 };
 
 function fmtManHours(minutes: number): string {
@@ -75,6 +77,9 @@ export default async function HistoryPage({
     }),
   ]);
 
+  const overheadMap =
+    user.role === "SUPERADMIN" ? await overheadByJob(jobs.map((j) => j.id)) : null;
+
   const rows: HistoryRow[] = jobs.map((job) => {
     const completedAt = job.completedAt!;
     const workStarts = job.timeLogs.map((l) => l.startedAt.getTime());
@@ -114,6 +119,7 @@ export default async function HistoryPage({
       idleMinutes: breakdown ? breakdown.idleMinutes : null,
       daysLate,
       labourCost,
+      overheads: overheadMap ? overheadMap.get(job.id) ?? 0 : null,
     };
   });
 
@@ -207,6 +213,7 @@ export default async function HistoryPage({
               <th className="px-4 py-3">Days</th>
               <th className="px-4 py-3">Man-hours</th>
               {user.role === "SUPERADMIN" && <th className="px-4 py-3">Labour ₹</th>}
+              {user.role === "SUPERADMIN" && <th className="px-4 py-3">Overheads ₹</th>}
               <th className="px-4 py-3">Idle</th>
               <th className="px-4 py-3">Vs plan</th>
             </tr>
@@ -232,6 +239,13 @@ export default async function HistoryPage({
                   <td className="px-4 py-3 whitespace-nowrap font-medium text-emerald-800">
                     {r.labourCost !== null && r.labourCost > 0
                       ? formatMoney(r.labourCost)
+                      : "—"}
+                  </td>
+                )}
+                {user.role === "SUPERADMIN" && (
+                  <td className="px-4 py-3 whitespace-nowrap font-medium text-emerald-800">
+                    {r.overheads !== null && r.overheads > 0
+                      ? formatMoney(r.overheads)
                       : "—"}
                   </td>
                 )}
@@ -263,7 +277,7 @@ export default async function HistoryPage({
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={11} className="px-4 py-10 text-center text-slate-400">
                   No completed jobs yet. Once jobs are marked completed, they appear
                   here with their timings for comparison.
                 </td>

@@ -26,6 +26,7 @@ model User {
   passwordHash String
   role         Role
   active       Boolean    @default(true)
+  monthlySalary Float? // ₹ per month — owner-only; ÷30 = daily overhead spread over the unit's running jobs
   units        UserUnit[] // units this user is scoped to (ignored for SUPERADMIN: sees all)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -43,6 +44,24 @@ model User {
   cranesEnded    CraneLog[]      @relation("CraneEndedBy")
   plansCreated   Plan[]          @relation("PlanCreatedBy")
   futureJobsAdded FutureJob[]    @relation("FutureJobAddedBy")
+  supervisorDays SupervisorDay[]
+}
+
+// One record per supervisor/admin per day: "I'm working at unit X today."
+// Punched from the dashboard each morning. Drives salary overheads: a
+// punched day costs monthlySalary/30, split across the unit's jobs that
+// had work logged that day.
+model SupervisorDay {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  unitId    String
+  unit      Unit     @relation(fields: [unitId], references: [id])
+  date      DateTime @db.Date // IST calendar date
+  createdAt DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([unitId, date])
 }
 
 model UserUnit {
@@ -73,6 +92,7 @@ model Unit {
   craneLogs    CraneLog[]
   futureJobs   FutureJob[]
   plans        Plan[]
+  supervisorDays SupervisorDay[]
 }
 
 model Employee {
