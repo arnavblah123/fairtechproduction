@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser, unitScope } from "@/lib/permissions";
-import { formatDate, jobCode } from "@/lib/format";
+import { formatDate, formatMoney, jobCode } from "@/lib/format";
 import { jobSpanBreakdown, fmtIdle } from "@/lib/idle";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,7 @@ type HistoryRow = {
   manMinutes: number;
   idleMinutes: number | null; // gap time with nobody clocked on, within the span
   daysLate: number; // negative = finished early
+  labourCost: number | null; // owner only — hours × each worker's hourly wage
 };
 
 function fmtManHours(minutes: number): string {
@@ -61,7 +62,13 @@ export default async function HistoryPage({
       include: {
         unit: true,
         template: true,
-        timeLogs: { select: { startedAt: true, endedAt: true } },
+        timeLogs: {
+          select: {
+            startedAt: true,
+            endedAt: true,
+            employee: { select: { hourlyWage: true } },
+          },
+        },
       },
       orderBy: { completedAt: "desc" },
       take: 500,
@@ -80,6 +87,15 @@ export default async function HistoryPage({
       return sum + Math.max(0, end.getTime() - l.startedAt.getTime()) / 60000;
     }, 0);
     const breakdown = jobSpanBreakdown(job.timeLogs, completedAt);
+    const labourCost =
+      user.role === "SUPERADMIN"
+        ? job.timeLogs.reduce((sum, l) => {
+            if (l.employee.hourlyWage === null) return sum;
+            const end = l.endedAt ?? completedAt;
+            const hours = Math.max(0, end.getTime() - l.startedAt.getTime()) / 3600000;
+            return sum + hours * l.employee.hourlyWage;
+          }, 0)
+        : null;
     const daysLate = Math.round(
       (completedAt.getTime() - job.expectedCompletion.getTime()) / 86400000
     );
@@ -97,6 +113,7 @@ export default async function HistoryPage({
       manMinutes,
       idleMinutes: breakdown ? breakdown.idleMinutes : null,
       daysLate,
+      labourCost,
     };
   });
 
@@ -154,6 +171,17 @@ export default async function HistoryPage({
                   <span><b>{list.length}</b> job{list.length === 1 ? "" : "s"}</span>
                   {avgDays !== null && <span>avg <b>{avgDays.toFixed(1)}</b> days</span>}
                   <span>avg <b>{avgHours.toFixed(1)}</b> man-hours</span>
+                  {user.role === "SUPERADMIN" && (
+                    <span>
+                      avg{" "}
+                      <b>
+                        {formatMoney(
+                          list.reduce((s, r) => s + (r.labourCost ?? 0), 0) / list.length
+                        )}
+                      </b>{" "}
+                      labour
+                    </span>
+                  )}
                   {avgIdle !== null && (
                     <span>avg <b>{fmtIdle(avgIdle)}</b> idle</span>
                   )}
@@ -178,6 +206,7 @@ export default async function HistoryPage({
               <th className="px-4 py-3">Completed</th>
               <th className="px-4 py-3">Days</th>
               <th className="px-4 py-3">Man-hours</th>
+              {user.role === "SUPERADMIN" && <th className="px-4 py-3">Labour ₹</th>}
               <th className="px-4 py-3">Idle</th>
               <th className="px-4 py-3">Vs plan</th>
             </tr>
@@ -199,6 +228,13 @@ export default async function HistoryPage({
                 <td className="px-4 py-3 whitespace-nowrap">{formatDate(r.completedAt)}</td>
                 <td className="px-4 py-3">{r.calendarDays ?? "—"}</td>
                 <td className="px-4 py-3 whitespace-nowrap">{fmtManHours(r.manMinutes)}</td>
+                {user.role === "SUPERADMIN" && (
+                  <td className="px-4 py-3 whitespace-nowrap font-medium text-emerald-800">
+                    {r.labourCost !== null && r.labourCost > 0
+                      ? formatMoney(r.labourCost)
+                      : "—"}
+                  </td>
+                )}
                 <td className="px-4 py-3 whitespace-nowrap">
                   {r.idleMinutes === null ? (
                     "—"
@@ -227,7 +263,7 @@ export default async function HistoryPage({
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
                   No completed jobs yet. Once jobs are marked completed, they appear
                   here with their timings for comparison.
                 </td>

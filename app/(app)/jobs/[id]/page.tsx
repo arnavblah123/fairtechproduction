@@ -21,6 +21,7 @@ import { QuickAddEmployee } from "@/components/quick-add-employee";
 import { deleteAttachment } from "@/lib/actions/attachments";
 import { ATTACHMENT_KIND_LABELS, formatFileSize } from "@/lib/attachments";
 import { workedByStage, fmtWorked } from "@/lib/idle";
+import { formatMoney } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -109,6 +110,34 @@ export default async function JobPage({
     select: { stageId: true, startedAt: true, endedAt: true },
   });
   const stageWorked = workedByStage(allStageLogs);
+
+  // Labour cost — owner only: every logged hour on this job × that worker's
+  // hourly wage (set on the Employees page). Open clocks count up to now.
+  const costLogs =
+    user.role === "SUPERADMIN"
+      ? await db.timeLog.findMany({
+          where: { jobId: id },
+          select: {
+            startedAt: true,
+            endedAt: true,
+            employee: { select: { id: true, name: true, hourlyWage: true } },
+          },
+        })
+      : [];
+  const costEnd = job.completedAt ?? new Date();
+  const perWorker = new Map<string, { name: string; wage: number | null; minutes: number }>();
+  for (const l of costLogs) {
+    const rec =
+      perWorker.get(l.employee.id) ??
+      { name: l.employee.name, wage: l.employee.hourlyWage, minutes: 0 };
+    rec.minutes += Math.max(0, ((l.endedAt ?? costEnd).getTime() - l.startedAt.getTime()) / 60000);
+    perWorker.set(l.employee.id, rec);
+  }
+  const workerCosts = [...perWorker.values()].sort(
+    (a, b) => (b.wage ?? 0) * b.minutes - (a.wage ?? 0) * a.minutes
+  );
+  const labourCost = workerCosts.reduce((s, w) => s + (w.wage ?? 0) * (w.minutes / 60), 0);
+  const unpricedCount = workerCosts.filter((w) => w.wage === null).length;
 
   const openIssues = job.issues.filter((i) => i.status === "OPEN");
   const totalReworks = job.stages.reduce((n, s) => n + s.reworks.length, 0);
@@ -266,6 +295,51 @@ export default async function JobPage({
                 </div>
               )}
             </dl>
+
+            {/* Labour cost — visible to the owner only */}
+            {user.role === "SUPERADMIN" && workerCosts.length > 0 && (
+              <details className="mt-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm max-w-xl">
+                <summary className="cursor-pointer select-none font-semibold text-emerald-900">
+                  💰 Labour cost so far: {formatMoney(labourCost)}
+                  {unpricedCount > 0 && (
+                    <span className="font-normal text-amber-700">
+                      {" "}· {unpricedCount} worker{unpricedCount === 1 ? "" : "s"} without wage set
+                    </span>
+                  )}
+                </summary>
+                <table className="mt-2 w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-emerald-700">
+                      <th className="py-1 pr-2">Worker</th>
+                      <th className="py-1 pr-2">Hours</th>
+                      <th className="py-1 pr-2">₹/hr</th>
+                      <th className="py-1 text-right">Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workerCosts.map((w) => (
+                      <tr key={w.name} className="border-t border-emerald-100">
+                        <td className="py-1 pr-2">{w.name}</td>
+                        <td className="py-1 pr-2">{(w.minutes / 60).toFixed(1)}</td>
+                        <td className="py-1 pr-2">
+                          {w.wage !== null ? (
+                            w.wage
+                          ) : (
+                            <span className="text-amber-700">not set</span>
+                          )}
+                        </td>
+                        <td className="py-1 text-right font-medium">
+                          {w.wage !== null ? formatMoney(w.wage * (w.minutes / 60)) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-1.5 text-[11px] text-emerald-700">
+                  Only you can see this. Wages are set per worker on the Employees page.
+                </p>
+              </details>
+            )}
             <div className="mt-2 flex items-center gap-3 text-sm">
               <a
                 href={googleCalendarLink({

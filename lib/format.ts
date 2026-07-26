@@ -60,6 +60,10 @@ export const ACTIVITY_LABELS: Record<string, string> = {
   STRUCTURAL_CUTTING: "🔩 Structural Cutting",
 };
 
+export function formatMoney(rupees: number): string {
+  return `₹${Math.round(rupees).toLocaleString("en-IN")}`;
+}
+
 export function jobCode(jobNumber: number): string {
   return `JOB-${String(jobNumber).padStart(4, "0")}`;
 }
