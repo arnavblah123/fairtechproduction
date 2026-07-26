@@ -64,6 +64,21 @@ model SupervisorDay {
   @@index([unitId, date])
 }
 
+// Fixed monthly overheads — rent, electricity, maintenance, flat salaries.
+// Owner-only. Each costs monthlyAmount/30 per day between effectiveFrom and
+// endedAt, split equally across the jobs that had work logged that day
+// (within its unit, or across all units when unitId is null).
+model OverheadItem {
+  id            String    @id @default(cuid())
+  name          String
+  monthlyAmount Float // ₹ per month
+  unitId        String? // null = company-wide, spread over all units' jobs
+  unit          Unit?     @relation(fields: [unitId], references: [id])
+  effectiveFrom DateTime  @db.Date
+  endedAt       DateTime? @db.Date // stopped from this day on; history keeps its cost
+  createdAt     DateTime  @default(now())
+}
+
 model UserUnit {
   userId String
   unitId String
@@ -93,6 +108,7 @@ model Unit {
   futureJobs   FutureJob[]
   plans        Plan[]
   supervisorDays SupervisorDay[]
+  overheadItems  OverheadItem[]
 }
 
 model Employee {

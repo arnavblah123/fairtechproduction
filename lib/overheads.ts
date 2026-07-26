@@ -1,12 +1,16 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 
-// Supervisor-salary overheads.
+// Overheads, all with the same day-spread rule: a daily cost is split
+// equally between the jobs that had any work logged that IST calendar day,
+// and a job's share is the sum of its slices across every day it ran.
 //
-// Every punched-in supervisor day costs monthlySalary / 30. That day-cost is
-// split equally between all jobs of that unit that had any work logged on
-// that IST calendar day — so a job's overhead share is the sum of its slices
-// across every day it was worked on.
+// Two sources:
+//  - Supervisor punch-ins: monthlySalary / 30 per punched day, spread over
+//    that unit's jobs running that day.
+//  - Fixed OverheadItems (rent, electricity, ...): monthlyAmount / 30 per
+//    day between effectiveFrom and endedAt — unit items spread over that
+//    unit's jobs, company-wide items over all units' jobs that day.
 
 // Today's IST calendar date, normalised to what @db.Date stores.
 export function istToday(): Date {
@@ -25,22 +29,49 @@ export async function overheadByJob(jobIds: string[]): Promise<Map<string, numbe
       JOIN "Job" j ON j.id = l."jobId"
       WHERE l."jobId" IS NOT NULL
     ),
-    counts AS (
+    counts_unit AS (
       SELECT d, unit, count(*)::float AS njobs FROM day_jobs GROUP BY d, unit
     ),
-    sup AS (
-      SELECT sd."date" AS d, sd."unitId" AS unit, sum(u."monthlySalary" / 30.0) AS cost
-      FROM "SupervisorDay" sd
-      JOIN "User" u ON u.id = sd."userId"
-      WHERE u."monthlySalary" IS NOT NULL
-      GROUP BY sd."date", sd."unitId"
+    counts_all AS (
+      SELECT d, count(*)::float AS njobs FROM day_jobs GROUP BY d
+    ),
+    parts AS (
+      -- punched-in supervisor salaries
+      SELECT dj.job AS job, s.cost / cu.njobs AS amt
+      FROM day_jobs dj
+      JOIN counts_unit cu ON cu.d = dj.d AND cu.unit = dj.unit
+      JOIN (
+        SELECT sd."date" AS d, sd."unitId" AS unit, sum(u."monthlySalary" / 30.0) AS cost
+        FROM "SupervisorDay" sd
+        JOIN "User" u ON u.id = sd."userId"
+        WHERE u."monthlySalary" IS NOT NULL
+        GROUP BY sd."date", sd."unitId"
+      ) s ON s.d = dj.d AND s.unit = dj.unit
+
+      UNION ALL
+
+      -- unit-specific fixed overheads (rent, electricity, ...)
+      SELECT dj.job, (o."monthlyAmount" / 30.0) / cu.njobs
+      FROM day_jobs dj
+      JOIN counts_unit cu ON cu.d = dj.d AND cu.unit = dj.unit
+      JOIN "OverheadItem" o ON o."unitId" = dj.unit
+        AND o."effectiveFrom" <= dj.d
+        AND (o."endedAt" IS NULL OR o."endedAt" >= dj.d)
+
+      UNION ALL
+
+      -- company-wide fixed overheads, spread over all units' jobs that day
+      SELECT dj.job, (o."monthlyAmount" / 30.0) / ca.njobs
+      FROM day_jobs dj
+      JOIN counts_all ca ON ca.d = dj.d
+      JOIN "OverheadItem" o ON o."unitId" IS NULL
+        AND o."effectiveFrom" <= dj.d
+        AND (o."endedAt" IS NULL OR o."endedAt" >= dj.d)
     )
-    SELECT dj.job AS "jobId", sum(s.cost / c.njobs)::float AS overhead
-    FROM day_jobs dj
-    JOIN counts c ON c.d = dj.d AND c.unit = dj.unit
-    JOIN sup s ON s.d = dj.d AND s.unit = dj.unit
-    WHERE dj.job IN (${Prisma.join(jobIds)})
-    GROUP BY dj.job
+    SELECT job AS "jobId", sum(amt)::float AS overhead
+    FROM parts
+    WHERE job IN (${Prisma.join(jobIds)})
+    GROUP BY job
   `);
   return new Map(rows.map((r) => [r.jobId, Number(r.overhead)]));
 }
