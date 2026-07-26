@@ -527,7 +527,9 @@ export default async function DashboardPage({
                               name="plan"
                               defaultValue={
                                 log.plannedEndAt
-                                  ? shiftPlanLabel(log.plannedEndAt).includes("10 PM")
+                                  ? shiftPlanLabel(log.plannedEndAt).includes("8 PM")
+                                    ? "EIGHT_PM"
+                                    : shiftPlanLabel(log.plannedEndAt).includes("10 PM")
                                     ? "TEN_PM"
                                     : "FULL_NIGHT"
                                   : "NORMAL"
@@ -535,6 +537,7 @@ export default async function DashboardPage({
                               className="rounded border border-teal-200 px-1 py-0.5 text-[10px] text-teal-800 bg-white"
                             >
                               <option value="NORMAL">Normal</option>
+                              <option value="EIGHT_PM">Till 8 PM</option>
                               <option value="TEN_PM">Till 10 PM</option>
                               <option value="FULL_NIGHT">Full night</option>
                             </select>

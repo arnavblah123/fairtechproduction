@@ -68,6 +68,7 @@ export default async function HistoryPage({
           select: {
             startedAt: true,
             endedAt: true,
+            otBonusMinutes: true,
             employee: { select: { hourlyWage: true } },
           },
         },
@@ -89,7 +90,10 @@ export default async function HistoryPage({
       : null;
     const manMinutes = job.timeLogs.reduce((sum, l) => {
       const end = l.endedAt ?? completedAt;
-      return sum + Math.max(0, end.getTime() - l.startedAt.getTime()) / 60000;
+      // otBonusMinutes = the +4h full-night OT credit
+      return (
+        sum + Math.max(0, end.getTime() - l.startedAt.getTime()) / 60000 + l.otBonusMinutes
+      );
     }, 0);
     const breakdown = jobSpanBreakdown(job.timeLogs, completedAt);
     const labourCost =
@@ -97,7 +101,9 @@ export default async function HistoryPage({
         ? job.timeLogs.reduce((sum, l) => {
             if (l.employee.hourlyWage === null) return sum;
             const end = l.endedAt ?? completedAt;
-            const hours = Math.max(0, end.getTime() - l.startedAt.getTime()) / 3600000;
+            const hours =
+              Math.max(0, end.getTime() - l.startedAt.getTime()) / 3600000 +
+              l.otBonusMinutes / 60;
             return sum + hours * l.employee.hourlyWage;
           }, 0)
         : null;

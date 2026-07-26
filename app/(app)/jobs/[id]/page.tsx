@@ -122,6 +122,7 @@ export default async function JobPage({
     select: {
       startedAt: true,
       endedAt: true,
+      otBonusMinutes: true,
       employee: { select: { id: true, name: true, hourlyWage: true } },
     },
   });
@@ -131,7 +132,9 @@ export default async function JobPage({
     const rec =
       perWorker.get(l.employee.id) ??
       { name: l.employee.name, wage: l.employee.hourlyWage, minutes: 0 };
-    rec.minutes += Math.max(0, ((l.endedAt ?? costEnd).getTime() - l.startedAt.getTime()) / 60000);
+    rec.minutes +=
+      Math.max(0, ((l.endedAt ?? costEnd).getTime() - l.startedAt.getTime()) / 60000) +
+      l.otBonusMinutes; // full-night +4h OT credit
     perWorker.set(l.employee.id, rec);
   }
   const workerCosts = [...perWorker.values()].sort(
@@ -886,7 +889,9 @@ export default async function JobPage({
                           name="plan"
                           defaultValue={
                             log.plannedEndAt
-                              ? shiftPlanLabel(log.plannedEndAt).includes("10 PM")
+                              ? shiftPlanLabel(log.plannedEndAt).includes("8 PM")
+                                ? "EIGHT_PM"
+                                : shiftPlanLabel(log.plannedEndAt).includes("10 PM")
                                 ? "TEN_PM"
                                 : "FULL_NIGHT"
                               : "NORMAL"
@@ -894,8 +899,9 @@ export default async function JobPage({
                           className="flex-1 min-w-0 rounded border border-slate-200 px-1.5 py-1 text-[11px] text-slate-600"
                         >
                           <option value="NORMAL">Normal day</option>
+                          <option value="EIGHT_PM">Till 8 PM</option>
                           <option value="TEN_PM">Till 10 PM</option>
-                          <option value="FULL_NIGHT">Full night (2:30 AM)</option>
+                          <option value="FULL_NIGHT">Full night (2:30 AM, +4h OT)</option>
                         </select>
                         <button className="rounded bg-slate-100 px-1.5 py-1 text-[11px]" title="Save plan">
                           ✓
@@ -1094,6 +1100,11 @@ export default async function JobPage({
                   <td className="px-2 py-2 whitespace-nowrap">
                     {log.endedAt ? formatDuration(log.startedAt, log.endedAt) : (
                       <LiveDuration since={log.startedAt} />
+                    )}
+                    {log.otBonusMinutes > 0 && (
+                      <span className="ml-1 text-xs font-semibold text-indigo-700">
+                        +{Math.round(log.otBonusMinutes / 60)}h OT
+                      </span>
                     )}
                   </td>
                   <td className="px-2 py-2 text-xs text-slate-500 whitespace-nowrap">

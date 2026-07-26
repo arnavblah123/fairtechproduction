@@ -313,8 +313,9 @@ export async function recordRework(formData: FormData) {
   revalidateJob(stage.jobId);
 }
 
-// Evening night plan for one running clock: till 10 PM, full night
-// (2:30 AM), or back to normal. The clock auto-stops at the cutoff.
+// Evening night plan for one running clock: till 8 PM, till 10 PM, full
+// night (2:30 AM), or back to normal. The clock auto-stops at the cutoff;
+// full-night shifts earn +4h OT when closed at the cutoff.
 export async function setShiftPlan(formData: FormData) {
   const user = await requireUser();
   const timeLogId = String(formData.get("timeLogId") ?? "");
@@ -325,7 +326,9 @@ export async function setShiftPlan(formData: FormData) {
 
   const { shiftPlanEnd } = await import("@/lib/shift");
   const plannedEndAt =
-    plan === "TEN_PM" || plan === "FULL_NIGHT" ? shiftPlanEnd(plan) : null;
+    plan === "EIGHT_PM" || plan === "TEN_PM" || plan === "FULL_NIGHT"
+      ? shiftPlanEnd(plan)
+      : null;
   await db.timeLog.update({ where: { id: timeLogId }, data: { plannedEndAt } });
   await audit(user.id, "timelog.shiftPlan", "TimeLog", timeLogId, {
     plan,

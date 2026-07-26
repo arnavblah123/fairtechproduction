@@ -366,8 +366,11 @@ model TimeLog {
   startedAt   DateTime   @default(now())
   endedAt     DateTime?
   // Evening night plan: when set, the clock auto-stops at this time
-  // (10:00 PM or 2:30 AM IST).
+  // (8:00 PM, 10:00 PM or 2:30 AM IST).
   plannedEndAt DateTime?
+  // OT credit: full-night shifts closed at the 2:30 AM cutoff earn +4 hours
+  // (240 min) on top of clocked time in all hour/cost totals.
+  otBonusMinutes Int @default(0)
   startSource LogSource  @default(MANUAL)
   endSource   LogSource?
   startedById String? // user who assigned, null when auto
