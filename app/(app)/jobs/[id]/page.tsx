@@ -23,6 +23,7 @@ import { ATTACHMENT_KIND_LABELS, formatFileSize } from "@/lib/attachments";
 import { workedByStage, fmtWorked } from "@/lib/idle";
 import { formatMoney } from "@/lib/format";
 import { overheadByJob } from "@/lib/overheads";
+import { updateOverheadItem } from "@/lib/actions/overheads";
 
 export const dynamic = "force-dynamic";
 
@@ -143,6 +144,14 @@ export default async function JobPage({
   // jobs running each day.
   const overheads =
     user.role === "SUPERADMIN" ? (await overheadByJob([id])).get(id) ?? 0 : 0;
+  // Running fixed overheads that touch this job's unit — editable in place.
+  const overheadItems =
+    user.role === "SUPERADMIN"
+      ? await db.overheadItem.findMany({
+          where: { endedAt: null, OR: [{ unitId: job.unitId }, { unitId: null }] },
+          orderBy: { name: "asc" },
+        })
+      : [];
 
   const openIssues = job.issues.filter((i) => i.status === "OPEN");
   const totalReworks = job.stages.reduce((n, s) => n + s.reworks.length, 0);
@@ -345,9 +354,58 @@ export default async function JobPage({
                 </table>
                 {overheads > 0 && (
                   <p className="mt-1.5 pt-1.5 border-t border-emerald-100 text-xs flex justify-between">
-                    <span>Supervisor overheads</span>
+                    <span>Overheads (supervisors + fixed costs)</span>
                     <span className="font-medium">{formatMoney(overheads)}</span>
                   </p>
+                )}
+
+                {/* Edit the fixed overhead costs right here — changes the
+                    global rate, so every job's share updates */}
+                {overheadItems.length > 0 && (
+                  <div className="mt-1.5 pt-1.5 border-t border-emerald-100 space-y-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                      Edit overhead costs (applies to all jobs)
+                    </p>
+                    {overheadItems.map((i) => (
+                      <form
+                        key={i.id}
+                        action={updateOverheadItem}
+                        className="flex items-center gap-1.5 text-xs"
+                      >
+                        <input type="hidden" name="itemId" value={i.id} />
+                        <input type="hidden" name="alsoRevalidate" value={`/jobs/${job.id}`} />
+                        <span className="flex-1 min-w-0 truncate">
+                          {i.name}
+                          {!i.unitId && <span className="text-emerald-600"> (all units)</span>}
+                        </span>
+                        <input
+                          name="monthlyAmount"
+                          type="number"
+                          min={1}
+                          step="1"
+                          defaultValue={i.monthlyAmount}
+                          className="w-24 rounded border border-emerald-200 px-1.5 py-1"
+                        />
+                        <select
+                          name="period"
+                          defaultValue={i.period}
+                          className="rounded border border-emerald-200 px-1 py-1"
+                        >
+                          <option value="MONTHLY">/mo</option>
+                          <option value="ANNUAL">/yr</option>
+                        </select>
+                        <button
+                          className="rounded bg-emerald-600 text-white px-1.5 py-1"
+                          title="Save — changes this cost for all jobs"
+                        >
+                          ✓
+                        </button>
+                      </form>
+                    ))}
+                    <Link href="/overheads" className="inline-block text-[11px] text-emerald-700 underline">
+                      Manage all overheads →
+                    </Link>
+                  </div>
                 )}
                 <p className="mt-1.5 text-[11px] text-emerald-700">
                   Only you can see this. Wages are per worker on the Employees page;

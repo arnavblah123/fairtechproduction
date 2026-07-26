@@ -64,14 +64,22 @@ model SupervisorDay {
   @@index([unitId, date])
 }
 
-// Fixed monthly overheads — rent, electricity, maintenance, flat salaries.
-// Owner-only. Each costs monthlyAmount/30 per day between effectiveFrom and
-// endedAt, split equally across the jobs that had work logged that day
-// (within its unit, or across all units when unitId is null).
+enum OverheadPeriod {
+  MONTHLY
+  ANNUAL
+}
+
+// Fixed overheads — rent, electricity, maintenance, insurance, flat
+// salaries. Owner-only. Daily cost is amount/30 for monthly items and
+// amount/360 for annual ones (12 × 30, so both conventions match), charged
+// between effectiveFrom and endedAt and split equally across the jobs that
+// had work logged that day (within its unit, or across all units when
+// unitId is null).
 model OverheadItem {
   id            String    @id @default(cuid())
   name          String
-  monthlyAmount Float // ₹ per month
+  monthlyAmount Float // ₹ per period (month or year — see `period`)
+  period        OverheadPeriod @default(MONTHLY)
   unitId        String? // null = company-wide, spread over all units' jobs
   unit          Unit?     @relation(fields: [unitId], references: [id])
   effectiveFrom DateTime  @db.Date

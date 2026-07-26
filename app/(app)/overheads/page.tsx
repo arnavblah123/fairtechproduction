@@ -1,6 +1,11 @@
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/permissions";
-import { addOverheadItem, stopOverheadItem, deleteOverheadItem } from "@/lib/actions/overheads";
+import {
+  addOverheadItem,
+  updateOverheadItem,
+  stopOverheadItem,
+  deleteOverheadItem,
+} from "@/lib/actions/overheads";
 import { formatDate, formatMoney } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +25,11 @@ export default async function OverheadsPage() {
   ]);
   const running = items.filter((i) => !i.endedAt);
   const stopped = items.filter((i) => i.endedAt);
-  const monthlyTotal = running.reduce((s, i) => s + i.monthlyAmount, 0);
+  // Everything reduced to a daily figure: monthly ÷ 30, annual ÷ 360.
+  const perDay = (i: { monthlyAmount: number; period: string }) =>
+    i.monthlyAmount / (i.period === "ANNUAL" ? 360 : 30);
+  const perLabel = (i: { period: string }) => (i.period === "ANNUAL" ? "/yr" : "/mo");
+  const dailyTotal = running.reduce((s, i) => s + perDay(i), 0);
 
   return (
     <div className="space-y-4 max-w-3xl">
@@ -28,15 +37,16 @@ export default async function OverheadsPage() {
         <h1 className="text-xl font-bold">💸 Overhead Costs</h1>
         {running.length > 0 && (
           <span className="bg-white rounded-lg px-3 py-1.5 shadow-sm text-sm">
-            Running: <b>{formatMoney(monthlyTotal)}</b>/month ={" "}
-            <b>{formatMoney(monthlyTotal / 30)}</b>/day
+            Running: <b>{formatMoney(dailyTotal * 30)}</b>/month ={" "}
+            <b>{formatMoney(dailyTotal)}</b>/day
           </span>
         )}
       </div>
       <p className="text-sm text-slate-600">
-        Only you can see this page. Each cost is divided by 30 for a daily amount and
-        spread equally across the jobs that had work going on that day — so every job
-        carries its true share. It shows up inside each job&apos;s cost as Overheads.
+        Only you can see this page. Each cost becomes a daily amount — monthly ÷ 30,
+        yearly ÷ 360 — and is spread equally across the jobs that had work going on
+        that day, so every job carries its true share. It shows up inside each
+        job&apos;s cost as Overheads.
       </p>
 
       {/* Add */}
@@ -54,7 +64,7 @@ export default async function OverheadsPage() {
           />
         </label>
         <label className="text-sm">
-          <span className="block text-xs text-slate-500 mb-0.5">₹ per month</span>
+          <span className="block text-xs text-slate-500 mb-0.5">Amount ₹</span>
           <input
             name="monthlyAmount"
             type="number"
@@ -64,6 +74,13 @@ export default async function OverheadsPage() {
             placeholder="50000"
             className="w-28 rounded-lg border border-slate-300 px-2 py-1.5"
           />
+        </label>
+        <label className="text-sm">
+          <span className="block text-xs text-slate-500 mb-0.5">Billed</span>
+          <select name="period" className="rounded-lg border border-slate-300 px-2 py-1.5">
+            <option value="MONTHLY">per month</option>
+            <option value="ANNUAL">per year</option>
+          </select>
         </label>
         <label className="text-sm">
           <span className="block text-xs text-slate-500 mb-0.5">Applies to</span>
@@ -96,7 +113,7 @@ export default async function OverheadsPage() {
           <thead>
             <tr className="text-left text-xs text-slate-500 border-b border-slate-100">
               <th className="px-4 py-3">Cost</th>
-              <th className="px-4 py-3">₹/month</th>
+              <th className="px-4 py-3">Amount</th>
               <th className="px-4 py-3">₹/day</th>
               <th className="px-4 py-3">Applies to</th>
               <th className="px-4 py-3">Counted from</th>
@@ -107,9 +124,32 @@ export default async function OverheadsPage() {
             {running.map((i) => (
               <tr key={i.id}>
                 <td className="px-4 py-3 font-medium">{i.name}</td>
-                <td className="px-4 py-3 whitespace-nowrap">{formatMoney(i.monthlyAmount)}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <form action={updateOverheadItem} className="flex items-center gap-1">
+                    <input type="hidden" name="itemId" value={i.id} />
+                    <input
+                      name="monthlyAmount"
+                      type="number"
+                      min={1}
+                      step="1"
+                      defaultValue={i.monthlyAmount}
+                      className="w-24 rounded border border-slate-200 px-1.5 py-1 text-xs"
+                    />
+                    <select
+                      name="period"
+                      defaultValue={i.period}
+                      className="rounded border border-slate-200 px-1 py-1 text-xs"
+                    >
+                      <option value="MONTHLY">/mo</option>
+                      <option value="ANNUAL">/yr</option>
+                    </select>
+                    <button className="rounded bg-slate-100 px-1.5 py-1 text-xs" title="Save change — applies to all days this cost covers">
+                      ✓
+                    </button>
+                  </form>
+                </td>
                 <td className="px-4 py-3 whitespace-nowrap text-slate-500">
-                  {formatMoney(i.monthlyAmount / 30)}
+                  {formatMoney(perDay(i))}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">{i.unit?.name ?? "All units"}</td>
                 <td className="px-4 py-3 whitespace-nowrap">{formatDate(i.effectiveFrom)}</td>
@@ -159,7 +199,7 @@ export default async function OverheadsPage() {
             {stopped.map((i) => (
               <li key={i.id} className="flex flex-wrap items-center gap-2">
                 <span className="font-medium text-slate-700">{i.name}</span>
-                <span>{formatMoney(i.monthlyAmount)}/mo</span>
+                <span>{formatMoney(i.monthlyAmount)}{perLabel(i)}</span>
                 <span>· {i.unit?.name ?? "All units"}</span>
                 <span>
                   · {formatDate(i.effectiveFrom)} – {formatDate(i.endedAt!)}

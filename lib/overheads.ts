@@ -8,9 +8,10 @@ import { db } from "@/lib/db";
 // Two sources:
 //  - Supervisor punch-ins: monthlySalary / 30 per punched day, spread over
 //    that unit's jobs running that day.
-//  - Fixed OverheadItems (rent, electricity, ...): monthlyAmount / 30 per
-//    day between effectiveFrom and endedAt — unit items spread over that
-//    unit's jobs, company-wide items over all units' jobs that day.
+//  - Fixed OverheadItems (rent, electricity, ...): amount / 30 per day for
+//    monthly items, amount / 360 for annual ones, between effectiveFrom and
+//    endedAt — unit items spread over that unit's jobs, company-wide items
+//    over all units' jobs that day.
 
 // Today's IST calendar date, normalised to what @db.Date stores.
 export function istToday(): Date {
@@ -51,7 +52,8 @@ export async function overheadByJob(jobIds: string[]): Promise<Map<string, numbe
       UNION ALL
 
       -- unit-specific fixed overheads (rent, electricity, ...)
-      SELECT dj.job, (o."monthlyAmount" / 30.0) / cu.njobs
+      SELECT dj.job,
+        (o."monthlyAmount" / (CASE WHEN o."period" = 'ANNUAL' THEN 360.0 ELSE 30.0 END)) / cu.njobs
       FROM day_jobs dj
       JOIN counts_unit cu ON cu.d = dj.d AND cu.unit = dj.unit
       JOIN "OverheadItem" o ON o."unitId" = dj.unit
@@ -61,7 +63,8 @@ export async function overheadByJob(jobIds: string[]): Promise<Map<string, numbe
       UNION ALL
 
       -- company-wide fixed overheads, spread over all units' jobs that day
-      SELECT dj.job, (o."monthlyAmount" / 30.0) / ca.njobs
+      SELECT dj.job,
+        (o."monthlyAmount" / (CASE WHEN o."period" = 'ANNUAL' THEN 360.0 ELSE 30.0 END)) / ca.njobs
       FROM day_jobs dj
       JOIN counts_all ca ON ca.d = dj.d
       JOIN "OverheadItem" o ON o."unitId" IS NULL
