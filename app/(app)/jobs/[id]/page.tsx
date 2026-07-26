@@ -113,19 +113,18 @@ export default async function JobPage({
   });
   const stageWorked = workedByStage(allStageLogs);
 
-  // Labour cost — owner only: every logged hour on this job × that worker's
-  // hourly wage (set on the Employees page). Open clocks count up to now.
-  const costLogs =
-    user.role === "SUPERADMIN"
-      ? await db.timeLog.findMany({
-          where: { jobId: id },
-          select: {
-            startedAt: true,
-            endedAt: true,
-            employee: { select: { id: true, name: true, hourlyWage: true } },
-          },
-        })
-      : [];
+  // Job cost: every logged hour on this job × that worker's hourly wage
+  // (set by the owner on the Employees page). Everyone with access to the
+  // job sees the totals and the labour breakdown; the overhead breakdown
+  // and editing stay owner-only.
+  const costLogs = await db.timeLog.findMany({
+    where: { jobId: id },
+    select: {
+      startedAt: true,
+      endedAt: true,
+      employee: { select: { id: true, name: true, hourlyWage: true } },
+    },
+  });
   const costEnd = job.completedAt ?? new Date();
   const perWorker = new Map<string, { name: string; wage: number | null; minutes: number }>();
   for (const l of costLogs) {
@@ -142,8 +141,7 @@ export default async function JobPage({
   const unpricedCount = workerCosts.filter((w) => w.wage === null).length;
   // Supervisor-salary overheads: punched-in days ÷ 30, split over the unit's
   // jobs running each day.
-  const overheads =
-    user.role === "SUPERADMIN" ? (await overheadByJob([id])).get(id) ?? 0 : 0;
+  const overheads = (await overheadByJob([id])).get(id) ?? 0;
   // Running fixed overheads that touch this job's unit — editable in place.
   const overheadItems =
     user.role === "SUPERADMIN"
@@ -311,14 +309,14 @@ export default async function JobPage({
             </dl>
 
             {/* Labour cost — visible to the owner only */}
-            {user.role === "SUPERADMIN" && (workerCosts.length > 0 || overheads > 0) && (
+            {(workerCosts.length > 0 || overheads > 0) && (
               <details className="mt-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm max-w-xl">
                 <summary className="cursor-pointer select-none font-semibold text-emerald-900">
                   💰 Cost so far: {formatMoney(labourCost + overheads)}
                   <span className="font-normal">
                     {" "}(labour {formatMoney(labourCost)} + overheads {formatMoney(overheads)})
                   </span>
-                  {unpricedCount > 0 && (
+                  {user.role === "SUPERADMIN" && unpricedCount > 0 && (
                     <span className="font-normal text-amber-700">
                       {" "}· {unpricedCount} worker{unpricedCount === 1 ? "" : "s"} without wage set
                     </span>
@@ -354,7 +352,7 @@ export default async function JobPage({
                 </table>
                 {overheads > 0 && (
                   <p className="mt-1.5 pt-1.5 border-t border-emerald-100 text-xs flex justify-between">
-                    <span>Overheads (supervisors + fixed costs)</span>
+                    <span>Overheads (this job&apos;s share of running costs)</span>
                     <span className="font-medium">{formatMoney(overheads)}</span>
                   </p>
                 )}
@@ -408,9 +406,9 @@ export default async function JobPage({
                   </div>
                 )}
                 <p className="mt-1.5 text-[11px] text-emerald-700">
-                  Only you can see this. Wages are per worker on the Employees page;
-                  overheads are punched-in supervisors&apos; salary ÷ 30, split over the
-                  unit&apos;s jobs running that day.
+                  {user.role === "SUPERADMIN"
+                    ? "Wages are per worker on the Employees page; overheads = punched-in supervisor salaries and fixed costs, ÷30 per day, split over the jobs running that day."
+                    : "Overheads are this job's share of the factory's running costs for the days it was worked on."}
                 </p>
               </details>
             )}
