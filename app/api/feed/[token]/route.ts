@@ -28,12 +28,16 @@ export async function GET(
         OR: [{ stageId: null }, { stage: { status: { not: "DONE" } } }],
       },
       include: {
-        job: { select: { jobNumber: true, clientName: true } },
+        job: { select: { jobNumber: true, clientName: true, status: true } },
         stage: { select: { sequence: true } },
       },
       orderBy: { targetDate: "asc" },
     }),
   ]);
+  // Dispatch targets drop off the calendar once the job has actually left.
+  const openPlanItems = planItems.filter(
+    (i) => !(i.isDispatch && i.job?.status === "COMPLETED")
+  );
 
   const ics = buildOwnerCalendar(
     jobs.map((j) => ({
@@ -46,7 +50,7 @@ export async function GET(
       reminderDaysBefore: j.reminderDaysBefore,
       estimatedDispatchAt: j.estimatedDispatchAt,
     })),
-    planItems.map((i) => ({
+    openPlanItems.map((i) => ({
       id: i.id,
       targetDate: i.targetDate,
       summary: `📋 Plan: ${i.stage ? `${i.stage.sequence}. ` : ""}${i.description}${

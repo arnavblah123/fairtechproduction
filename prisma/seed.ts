@@ -133,6 +133,19 @@ async function main() {
     await db.setting.create({ data: { key: rajguruKey, value: "done" } });
   }
 
+  // --- One-time wipe (guarded): owner requested a full redo of Savli
+  // Unit-3 — delete ALL its jobs (any status) with their stages, time
+  // logs, issues, tests and attachments (relation cascades handle those).
+  const savliWipeKey = "patch.2026-07-27.delete-savli-jobs";
+  if (!(await db.setting.findUnique({ where: { key: savliWipeKey } }))) {
+    const savli = await db.unit.findUnique({ where: { code: "SV3" } });
+    if (savli) {
+      const gone = await db.job.deleteMany({ where: { unitId: savli.id } });
+      console.log(`Patch: deleted ${gone.count} Savli Unit-3 jobs for the redo.`);
+    }
+    await db.setting.create({ data: { key: savliWipeKey, value: "done" } });
+  }
+
   // --- Real employees (prisma/import/employees.json, extracted from the
   // unit muster registers). Idempotent: existing codes are left untouched,
   // so renames/transfers made in the app are never overwritten.

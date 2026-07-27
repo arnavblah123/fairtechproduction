@@ -469,8 +469,10 @@ model PlanItem {
   stageId     String?
   stage       Stage?    @relation(fields: [stageId], references: [id], onDelete: SetNull)
   description String
-  targetDate  DateTime
+  targetDate  DateTime // estimated (planned) date
+  isDispatch  Boolean   @default(false) // target = the job's dispatch, auto-done when dispatched
   done        Boolean   @default(false)
+  doneAt      DateTime? // when manually ticked; stage/dispatch items use real completion times
   createdAt   DateTime  @default(now())
 
   @@index([planId])

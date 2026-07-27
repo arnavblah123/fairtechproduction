@@ -38,8 +38,17 @@ export default async function PlanningPage() {
         items: {
           orderBy: { targetDate: "asc" },
           include: {
-            job: { select: { id: true, jobNumber: true, clientName: true, description: true } },
-            stage: { select: { name: true, sequence: true, status: true } },
+            job: {
+              select: {
+                id: true,
+                jobNumber: true,
+                clientName: true,
+                description: true,
+                status: true,
+                completedAt: true,
+              },
+            },
+            stage: { select: { name: true, sequence: true, status: true, completedAt: true } },
           },
         },
       },
@@ -47,7 +56,8 @@ export default async function PlanningPage() {
       take: 30,
     }),
     db.job.findMany({
-      where: { status: { not: "COMPLETED" } },
+      // Jobs awaiting dispatch are already built — keep them out of planning.
+      where: { status: { notIn: ["COMPLETED", "READY_TO_DISPATCH"] } },
       include: {
         stages: { orderBy: { sequence: "asc" }, select: { id: true, name: true, sequence: true, status: true } },
         unit: { select: { code: true } },
@@ -63,7 +73,14 @@ export default async function PlanningPage() {
 
   const now = Date.now();
   const isItemDone = (item: (typeof plans)[0]["items"][0]) =>
-    item.done || item.stage?.status === "DONE";
+    item.done ||
+    item.stage?.status === "DONE" ||
+    (item.isDispatch && item.job?.status === "COMPLETED");
+  // Actual completion date: real stage/dispatch time, else the manual tick.
+  const actualDoneAt = (item: (typeof plans)[0]["items"][0]) =>
+    item.stage?.completedAt ??
+    (item.isDispatch ? item.job?.completedAt ?? null : null) ??
+    item.doneAt;
 
   // Owner-only job history for the target picker: when a job is selected,
   // show what's done, the time gone in and the money gone in so far.
@@ -246,6 +263,28 @@ export default async function PlanningPage() {
                       by {formatDate(item.targetDate)}
                       {overdue && " — LATE"}
                     </span>
+                    {/* Estimated vs actual: once done, show the difference */}
+                    {done && actualDoneAt(item) && (() => {
+                      const actual = actualDoneAt(item)!;
+                      const diffDays = Math.round(
+                        (actual.getTime() - item.targetDate.getTime()) / DAY
+                      );
+                      return (
+                        <span
+                          className={`text-xs whitespace-nowrap font-medium ${
+                            diffDays > 0 ? "text-red-700" : "text-green-700"
+                          }`}
+                        >
+                          done {formatDate(actual)} (
+                          {diffDays === 0
+                            ? "on time"
+                            : diffDays > 0
+                            ? `${diffDays}d late`
+                            : `${-diffDays}d early`}
+                          )
+                        </span>
+                      );
+                    })()}
                     {owner && (
                       <span className="flex gap-1.5">
                         {!item.stage && (

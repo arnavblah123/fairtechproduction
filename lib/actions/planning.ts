@@ -46,26 +46,33 @@ export async function addPlanItem(formData: FormData) {
   const user = await requireRole("SUPERADMIN");
   const planId = String(formData.get("planId") ?? "");
   const jobId = String(formData.get("jobId") ?? "") || null;
-  const stageId = String(formData.get("stageId") ?? "") || null;
+  const stageRaw = String(formData.get("stageId") ?? "");
+  // "dispatch" is a sentinel: the target is the job's dispatch itself,
+  // auto-ticked when the job is marked Dispatched.
+  const isDispatch = stageRaw === "dispatch";
+  const stageId = isDispatch ? null : stageRaw || null;
   let description = String(formData.get("description") ?? "").trim();
   const targetRaw = String(formData.get("targetDate") ?? "");
   const targetDate = targetRaw ? new Date(targetRaw) : null;
   if (!targetDate || isNaN(targetDate.getTime())) return;
+  if (isDispatch && !jobId) return;
 
   if (stageId) {
     const stage = await db.stage.findUniqueOrThrow({ where: { id: stageId } });
     if (jobId && stage.jobId !== jobId) return;
     if (!description) description = stage.name;
   }
+  if (isDispatch && !description) description = "🚚 Dispatch";
   if (!description) return;
 
   const item = await db.planItem.create({
-    data: { planId, jobId, stageId, description, targetDate },
+    data: { planId, jobId, stageId, description, targetDate, isDispatch },
   });
   await audit(user.id, "plan.itemAdd", "PlanItem", item.id, {
     planId,
     jobId,
     stageId,
+    isDispatch,
     description,
     targetDate: targetDate.toISOString(),
   });
@@ -85,7 +92,10 @@ export async function togglePlanItemDone(formData: FormData) {
   const user = await requireRole("SUPERADMIN");
   const itemId = String(formData.get("itemId") ?? "");
   const item = await db.planItem.findUniqueOrThrow({ where: { id: itemId } });
-  await db.planItem.update({ where: { id: itemId }, data: { done: !item.done } });
+  await db.planItem.update({
+    where: { id: itemId },
+    data: { done: !item.done, doneAt: item.done ? null : new Date() },
+  });
   await audit(user.id, "plan.itemToggle", "PlanItem", itemId, { done: !item.done });
   revalidatePath("/planning");
 }

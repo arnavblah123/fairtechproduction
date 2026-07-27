@@ -67,6 +67,7 @@ export function PlanItemForm({ planId, jobs }: Props) {
               {s.done ? " ✓" : ""}
             </option>
           ))}
+          <option value="dispatch">🚚 Dispatch (auto-ticks when dispatched)</option>
         </select>
       ) : null}
       <input
