@@ -10,7 +10,9 @@ import {
   deleteFutureJob,
 } from "@/lib/actions/planning";
 import { PlanItemForm } from "@/components/plan-item-form";
-import { formatDate, jobCode } from "@/lib/format";
+import { formatDate, formatMoney, jobCode } from "@/lib/format";
+import { workedByStage, fmtWorked } from "@/lib/idle";
+import { overheadByJob } from "@/lib/overheads";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +65,59 @@ export default async function PlanningPage() {
   const isItemDone = (item: (typeof plans)[0]["items"][0]) =>
     item.done || item.stage?.status === "DONE";
 
+  // Owner-only job history for the target picker: when a job is selected,
+  // show what's done, the time gone in and the money gone in so far.
+  const jobIds = openJobs.map((j) => j.id);
+  const [historyLogs, overheadMap] = owner
+    ? await Promise.all([
+        db.timeLog.findMany({
+          where: { jobId: { in: jobIds } },
+          select: {
+            jobId: true,
+            stageId: true,
+            startedAt: true,
+            endedAt: true,
+            otBonusMinutes: true,
+            employee: { select: { hourlyWage: true } },
+          },
+        }),
+        overheadByJob(jobIds),
+      ])
+    : [[], new Map<string, number>()];
+  const nowDate = new Date();
+  const jobInfo = new Map<
+    string,
+    { started: string | null; manHours: string; cost: string; stageWorked: Map<string, number> }
+  >();
+  if (owner) {
+    for (const j of openJobs) {
+      const logs = historyLogs.filter((l) => l.jobId === j.id);
+      const manMinutes = logs.reduce(
+        (s, l) =>
+          s +
+          Math.max(0, ((l.endedAt ?? nowDate).getTime() - l.startedAt.getTime()) / 60000) +
+          l.otBonusMinutes,
+        0
+      );
+      const labour = logs.reduce((s, l) => {
+        if (l.employee.hourlyWage === null) return s;
+        const hours =
+          Math.max(0, ((l.endedAt ?? nowDate).getTime() - l.startedAt.getTime()) / 3600000) +
+          l.otBonusMinutes / 60;
+        return s + hours * l.employee.hourlyWage;
+      }, 0);
+      const started = logs.length
+        ? new Date(Math.min(...logs.map((l) => l.startedAt.getTime())))
+        : null;
+      jobInfo.set(j.id, {
+        started: started ? formatDate(started) : null,
+        manHours: (manMinutes / 60).toFixed(1),
+        cost: formatMoney(labour + (overheadMap.get(j.id) ?? 0)),
+        stageWorked: workedByStage(logs, nowDate),
+      });
+    }
+  }
+
   // Unit-wise grouping: each unit section shows its current plan and its
   // past plans; plans without a unit go under "All units".
   const visibleUnits = units.filter(
@@ -82,15 +137,32 @@ export default async function PlanningPage() {
   const jobsForPicker = (unitId: string | null) =>
     openJobs
       .filter((j) => !unitId || j.unitId === unitId)
-      .map((j) => ({
-        id: j.id,
-        label: `${jobCode(j.jobNumber)} ${j.clientName} — ${j.description} (${j.unit.code})`,
-        stages: j.stages.map((s) => ({
-          id: s.id,
-          label: `${s.sequence}. ${s.name}`,
-          done: s.status === "DONE",
-        })),
-      }));
+      .map((j) => {
+        const info = jobInfo.get(j.id);
+        return {
+          id: j.id,
+          label: `${jobCode(j.jobNumber)} ${j.clientName} — ${j.description} (${j.unit.code})`,
+          info: info
+            ? {
+                started: info.started,
+                manHours: info.manHours,
+                cost: info.cost,
+                doneCount: j.stages.filter((s) => s.status === "DONE").length,
+                totalCount: j.stages.length,
+              }
+            : null,
+          stages: j.stages.map((s) => {
+            const worked = info?.stageWorked.get(s.id);
+            return {
+              id: s.id,
+              label: `${s.sequence}. ${s.name}`,
+              done: s.status === "DONE",
+              state: s.status,
+              worked: worked !== undefined ? fmtWorked(worked) : null,
+            };
+          }),
+        };
+      });
 
   function renderPlan(plan: typeof plans[0], isCurrent: boolean) {
     const doneCount = plan.items.filter(isItemDone).length;
