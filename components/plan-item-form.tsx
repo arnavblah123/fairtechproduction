@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { addPlanItem } from "@/lib/actions/planning";
+import { SearchSelect } from "@/components/search-select";
 
 type Props = {
   planId: string;
@@ -43,19 +44,16 @@ export function PlanItemForm({ planId, jobs }: Props) {
   return (
     <form action={addPlanItem} className="flex flex-wrap items-center gap-1.5 text-sm">
       <input type="hidden" name="planId" value={planId} />
-      <select
+      <SearchSelect
         name="jobId"
-        value={jobId}
-        onChange={(e) => setJobId(e.target.value)}
-        className="rounded-lg border border-slate-300 px-2 py-1.5 max-w-44"
-      >
-        <option value="">General (no job)</option>
-        {jobs.map((j) => (
-          <option key={j.id} value={j.id}>
-            {j.label}
-          </option>
-        ))}
-      </select>
+        className="w-56"
+        placeholder="Job — type to search…"
+        onValueChange={setJobId}
+        options={[
+          { value: "", label: "General (no job)" },
+          ...jobs.map((j) => ({ value: j.id, label: j.label })),
+        ]}
+      />
       {job ? (
         <select
           name="stageId"

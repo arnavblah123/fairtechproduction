@@ -7,6 +7,7 @@ import {
   PriorityBadge,
 } from "@/components/badges";
 import { LiveDuration } from "@/components/live-duration";
+import { SearchSelect } from "@/components/search-select";
 import { formatDate, formatDateTime, jobCode, ACTIVITY_LABELS } from "@/lib/format";
 import { assignGeneralDuty, assignDispatchWorker, stopWorker } from "@/lib/actions/stages";
 import { setJobRank, dispatchJob } from "@/lib/actions/jobs";
@@ -454,23 +455,16 @@ export default async function DashboardPage({
                           <div className="flex gap-1.5">
                             <form action={assignDispatchWorker} className="flex gap-1.5 flex-1 min-w-0">
                               <input type="hidden" name="jobId" value={job.id} />
-                              <select
+                              <SearchSelect
                                 name="employeeId"
                                 required
-                                defaultValue=""
-                                className="flex-1 min-w-0 rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
-                              >
-                                <option value="" disabled>
-                                  Worker for dispatch…
-                                </option>
-                                {unitWorkers
+                                small
+                                className="flex-1 min-w-0"
+                                placeholder="Worker for dispatch — search…"
+                                options={unitWorkers
                                   .filter((w) => w.primaryUnitId === unit.id)
-                                  .map((w) => (
-                                    <option key={w.id} value={w.id}>
-                                      {w.name} ({w.skill})
-                                    </option>
-                                  ))}
-                              </select>
+                                  .map((w) => ({ value: w.id, label: `${w.name} (${w.skill})` }))}
+                              />
                               <button className="rounded-lg bg-cyan-600 text-white px-2.5 text-xs">
                                 Go
                               </button>
@@ -563,23 +557,16 @@ export default async function DashboardPage({
                     ))}
                   <form action={assignGeneralDuty} className="flex gap-1.5">
                     <input type="hidden" name="unitId" value={unit.id} />
-                    <select
+                    <SearchSelect
                       name="employeeId"
                       required
-                      defaultValue=""
-                      className="flex-1 min-w-0 rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
-                    >
-                      <option value="" disabled>
-                        Put worker on…
-                      </option>
-                      {unitWorkers
+                      small
+                      className="flex-1 min-w-0"
+                      placeholder="Put worker on — search…"
+                      options={unitWorkers
                         .filter((w) => w.primaryUnitId === unit.id)
-                        .map((w) => (
-                          <option key={w.id} value={w.id}>
-                            {w.name} ({w.skill})
-                          </option>
-                        ))}
-                    </select>
+                        .map((w) => ({ value: w.id, label: `${w.name} (${w.skill})` }))}
+                    />
                     <select
                       name="activity"
                       className="rounded-lg border border-slate-300 px-1.5 py-1.5 text-xs"
@@ -636,22 +623,20 @@ export default async function DashboardPage({
                         <option value="MATERIAL_HANDLING">For Material Handling</option>
                         <option value="DISPATCH">For Dispatch</option>
                       </select>
-                      <select
+                      <SearchSelect
                         name="jobId"
                         required
-                        defaultValue=""
-                        className="flex-1 min-w-28 rounded-lg border border-slate-300 px-1.5 py-1.5 text-xs"
-                      >
-                        <option value="" disabled>
-                          For which job?
-                        </option>
-                        {allUnitJobs.map((j) => (
-                          <option key={j.id} value={j.id}>
-                            {jobCode(j.jobNumber)} {j.clientName}
-                          </option>
-                        ))}
-                        <option value="none">Not for one job (general)</option>
-                      </select>
+                        small
+                        className="flex-1 min-w-28"
+                        placeholder="For which job? Search…"
+                        options={[
+                          ...allUnitJobs.map((j) => ({
+                            value: j.id,
+                            label: `${j.description} · ${jobCode(j.jobNumber)} ${j.clientName}`,
+                          })),
+                          { value: "none", label: "Not for one job (general)" },
+                        ]}
+                      />
                       <input
                         name="note"
                         placeholder="Note (optional)"

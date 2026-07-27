@@ -18,6 +18,7 @@ import { formatDate, formatDateTime, formatDuration, jobCode } from "@/lib/forma
 import { googleCalendarLink, isCalendarConfigured } from "@/lib/google-calendar";
 import { AttachmentUpload } from "@/components/attachment-upload";
 import { QuickAddEmployee } from "@/components/quick-add-employee";
+import { SearchSelect } from "@/components/search-select";
 import { deleteAttachment } from "@/lib/actions/attachments";
 import { ATTACHMENT_KIND_LABELS, formatFileSize } from "@/lib/attachments";
 import { workedByStage, fmtWorked } from "@/lib/idle";
@@ -217,32 +218,24 @@ export default async function JobPage({
                   {emp.name}
                   <span className="text-blue-200 text-xs font-normal"> ({emp.skill})</span>
                 </span>
-                <select
+                <SearchSelect
                   name="target"
-                  className="flex-1 min-w-40 rounded-lg border-0 px-2 py-1.5 text-sm text-slate-900"
-                  defaultValue=""
                   required
-                >
-                  <option value="" disabled>
-                    Next work…
-                  </option>
-                  {shiftTargets.length > 0 && (
-                    <optgroup label="This job's stages">
-                      {shiftTargets.map((s) => (
-                        <option key={s.id} value={`stage:${s.id}`}>
-                          {s.sequence}. {s.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  <optgroup label="General duties">
-                    <option value="duty:MATERIAL_HANDLING">🚚 Material Handling</option>
-                    <option value="duty:DISPATCH">📦 Dispatch</option>
-                    <option value="duty:PLATE_CUTTING">🔥 Plate Cutting</option>
-                    <option value="duty:STRUCTURAL_CUTTING">🔩 Structural Cutting</option>
-                  </optgroup>
-                  <option value="none">Nothing for now (leave stopped)</option>
-                </select>
+                  className="flex-1 min-w-40"
+                  placeholder="Next work — type to search…"
+                  options={[
+                    ...shiftTargets.map((s) => ({
+                      value: `stage:${s.id}`,
+                      label: `${s.sequence}. ${s.name}`,
+                      group: "This job's stages",
+                    })),
+                    { value: "duty:MATERIAL_HANDLING", label: "🚚 Material Handling", group: "General duties" },
+                    { value: "duty:DISPATCH", label: "📦 Dispatch", group: "General duties" },
+                    { value: "duty:PLATE_CUTTING", label: "🔥 Plate Cutting", group: "General duties" },
+                    { value: "duty:STRUCTURAL_CUTTING", label: "🔩 Structural Cutting", group: "General duties" },
+                    { value: "none", label: "Nothing for now (leave stopped)" },
+                  ]}
+                />
                 <button className="rounded-lg bg-white text-blue-700 px-3 py-1.5 text-sm font-semibold">
                   Shift
                 </button>
@@ -930,25 +923,19 @@ export default async function JobPage({
               {job.status !== "COMPLETED" && (
                 <form action={assignWorker} className="flex gap-1">
                   <input type="hidden" name="stageId" value={stage.id} />
-                  <select
+                  <SearchSelect
                     name="employeeId"
                     required
-                    className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm min-w-0"
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Assign worker…
-                    </option>
-                    {workerGroups.map((g) => (
-                      <optgroup key={g.label} label={g.label}>
-                        {g.list.map((e) => (
-                          <option key={e.id} value={e.id}>
-                            {e.name} ({e.skill})
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
+                    className="flex-1 min-w-0"
+                    placeholder="Assign worker — type to search…"
+                    options={workerGroups.flatMap((g) =>
+                      g.list.map((e) => ({
+                        value: e.id,
+                        label: `${e.name} (${e.skill})`,
+                        group: g.label,
+                      }))
+                    )}
+                  />
                   <button className="rounded-lg bg-blue-600 text-white px-3.5 py-1.5 text-sm active:bg-blue-700">
                     ➜
                   </button>
