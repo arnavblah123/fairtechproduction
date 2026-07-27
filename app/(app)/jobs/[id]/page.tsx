@@ -149,7 +149,11 @@ export default async function JobPage({
   const overheadItems =
     user.role === "SUPERADMIN"
       ? await db.overheadItem.findMany({
-          where: { endedAt: null, OR: [{ unitId: job.unitId }, { unitId: null }] },
+          where: {
+            endedAt: null,
+            OR: [{ units: { none: {} } }, { units: { some: { unitId: job.unitId } } }],
+          },
+          include: { units: { select: { unit: { select: { code: true } } } } },
           orderBy: { name: "asc" },
         })
       : [];
@@ -377,7 +381,12 @@ export default async function JobPage({
                         <input type="hidden" name="alsoRevalidate" value={`/jobs/${job.id}`} />
                         <span className="flex-1 min-w-0 truncate">
                           {i.name}
-                          {!i.unitId && <span className="text-emerald-600"> (all units)</span>}
+                          <span className="text-emerald-600">
+                            {" "}
+                            ({i.units.length === 0
+                              ? "all units"
+                              : i.units.map((x) => x.unit.code).sort().join(", ")})
+                          </span>
                         </span>
                         <input
                           name="monthlyAmount"

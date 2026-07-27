@@ -31,9 +31,20 @@ export async function createJob(
   const templateId = String(formData.get("templateId") ?? "") || null;
   const customStagesRaw = String(formData.get("customStages") ?? "");
   const saveAsTemplate = String(formData.get("saveAsTemplate") ?? "").trim();
+  // Material availability: "no" must say what's needed and by when — that
+  // auto-raises a Material Shortage issue on the new job.
+  const materialReady = String(formData.get("materialReady") ?? "yes") !== "no";
+  const materialNote = String(formData.get("materialNote") ?? "").trim();
+  const materialNeededByRaw = String(formData.get("materialNeededBy") ?? "");
 
   if (!clientName || !description || !unitId) {
     return { error: "Client name, description and unit are required." };
+  }
+  if (!materialReady && !materialNote) {
+    return { error: "Material not available — write what material is needed." };
+  }
+  if (!materialReady && !materialNeededByRaw) {
+    return { error: "Material not available — give the date it is needed by." };
   }
   if (!expectedCompletionRaw) {
     return { error: "Expected completion date is mandatory." };
@@ -148,6 +159,7 @@ export async function createJob(
         expectedCompletion,
         reminderDaysBefore: isNaN(reminderDaysBefore) ? 7 : reminderDaysBefore,
         priority,
+        materialReady,
         templateId: usedTemplateId,
         createdById: user.id,
         stages: {
@@ -183,6 +195,31 @@ export async function createJob(
           uploadedById: user.id,
         })),
       });
+    }
+    if (!materialReady) {
+      const neededBy = new Date(materialNeededByRaw);
+      const issue = await tx.issue.create({
+        data: {
+          jobId: created.id,
+          unitId,
+          type: "MATERIAL_SHORTAGE",
+          description: `Material needed: ${materialNote}${
+            isNaN(neededBy.getTime())
+              ? ""
+              : ` — needed by ${neededBy.toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                  timeZone: "Asia/Kolkata",
+                })}`
+          }`,
+          raisedById: user.id,
+        },
+      });
+      await audit(user.id, "issue.autoRaise", "Issue", issue.id, {
+        jobId: created.id,
+        reason: "material not available at job creation",
+      }, tx);
     }
     await audit(user.id, "job.create", "Job", created.id, {
       clientName,

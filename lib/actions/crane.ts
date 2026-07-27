@@ -12,13 +12,19 @@ export async function startCrane(formData: FormData) {
   const unitId = String(formData.get("unitId") ?? "");
   const purpose = String(formData.get("purpose") ?? "") as "MATERIAL_HANDLING" | "DISPATCH";
   const note = String(formData.get("note") ?? "").trim() || null;
+  let jobId = String(formData.get("jobId") ?? "") || null;
+  if (jobId === "none") jobId = null;
   if (!["MATERIAL_HANDLING", "DISPATCH"].includes(purpose)) return;
   assertUnitAccess(user, unitId);
+  if (jobId) {
+    const job = await db.job.findUnique({ where: { id: jobId } });
+    if (!job || job.unitId !== unitId) jobId = null;
+  }
 
   const log = await db.craneLog.create({
-    data: { unitId, purpose, note, startedById: user.id },
+    data: { unitId, purpose, note, jobId, startedById: user.id },
   });
-  await audit(user.id, "crane.start", "CraneLog", log.id, { unitId, purpose, note });
+  await audit(user.id, "crane.start", "CraneLog", log.id, { unitId, purpose, note, jobId });
   revalidatePath("/");
 }
 

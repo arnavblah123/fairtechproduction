@@ -134,6 +134,22 @@ export async function setEmployeeWage(formData: FormData) {
   revalidatePath("/employees");
 }
 
+// ESI/PF monthly lump sum — owner only. Spread as overheads: ÷30 per day
+// the worker logged job time, split over the jobs they were on that day.
+export async function setEmployeeEsiPf(formData: FormData) {
+  const user = await requireUser();
+  if (user.role !== "SUPERADMIN") throw new Error("Only the owner can set ESI/PF amounts.");
+  const employeeId = String(formData.get("employeeId") ?? "");
+  const raw = String(formData.get("esiPfMonthly") ?? "").trim();
+  const esiPfMonthly = raw === "" ? null : Number(raw);
+  if (esiPfMonthly !== null && (isNaN(esiPfMonthly) || esiPfMonthly < 0 || esiPfMonthly > 1000000)) {
+    throw new Error("Enter a valid monthly ESI/PF amount in rupees.");
+  }
+  await db.employee.update({ where: { id: employeeId }, data: { esiPfMonthly } });
+  await audit(user.id, "employee.esiPf", "Employee", employeeId, { esiPfMonthly });
+  revalidatePath("/employees");
+}
+
 export async function setEmployeeActive(formData: FormData) {
   const user = await requireUser();
   if (!isAdmin(user)) throw new Error("Not allowed");

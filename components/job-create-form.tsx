@@ -36,6 +36,7 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [stagesText, setStagesText] = useState("");
   const [autoMatched, setAutoMatched] = useState<string | null>(null);
+  const [materialReady, setMaterialReady] = useState("yes");
   // Remember the last auto/template fill so we never overwrite manual edits.
   const lastApplied = useRef("");
 
@@ -205,6 +206,44 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
         <input type="checkbox" name="priority" className="h-4 w-4" />
         Priority job
       </label>
+
+      {/* Material availability — "No" auto-raises a Material Shortage issue */}
+      <fieldset className="border-t border-slate-100 pt-4 space-y-3">
+        <legend className="text-sm font-semibold">Material</legend>
+        <div>
+          <label className={labelCls}>Is all material available for this job? *</label>
+          <select
+            name="materialReady"
+            value={materialReady}
+            onChange={(e) => setMaterialReady(e.target.value)}
+            className={inputCls}
+          >
+            <option value="yes">Yes — all material available</option>
+            <option value="no">No — some material is needed</option>
+          </select>
+        </div>
+        {materialReady === "no" && (
+          <div className="grid sm:grid-cols-2 gap-4 rounded-lg bg-amber-50 border border-amber-200 p-3">
+            <div className="sm:col-span-2">
+              <label className={labelCls}>What material is needed? *</label>
+              <textarea
+                name="materialNote"
+                required
+                rows={2}
+                placeholder="e.g. 12mm SA516 Gr70 plates 2 nos, SS304 pipe 3m…"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Needed by what date? *</label>
+              <input name="materialNeededBy" type="date" required className={inputCls} />
+            </div>
+            <p className="text-xs text-amber-700 self-end">
+              This raises a Material Shortage issue on the job automatically.
+            </p>
+          </div>
+        )}
+      </fieldset>
 
       {/* Stages: template pre-fills, always editable for this job */}
       <fieldset className="border-t border-slate-100 pt-4 space-y-3">

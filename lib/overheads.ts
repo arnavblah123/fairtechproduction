@@ -5,13 +5,15 @@ import { db } from "@/lib/db";
 // equally between the jobs that had any work logged that IST calendar day,
 // and a job's share is the sum of its slices across every day it ran.
 //
-// Two sources:
+// Three sources:
 //  - Supervisor punch-ins: monthlySalary / 30 per punched day, spread over
 //    that unit's jobs running that day.
 //  - Fixed OverheadItems (rent, electricity, ...): amount / 30 per day for
 //    monthly items, amount / 360 for annual ones, between effectiveFrom and
-//    endedAt — unit items spread over that unit's jobs, company-wide items
-//    over all units' jobs that day.
+//    endedAt — spread over the pooled jobs of the item's selected units
+//    that day (no selected units = all units).
+//  - Worker ESI/PF lump sums: esiPfMonthly / 30 per day the worker logged
+//    any job time, split over the jobs that worker was on that day.
 
 // Today's IST calendar date, normalised to what @db.Date stores.
 export function istToday(): Date {
@@ -33,8 +35,34 @@ export async function overheadByJob(jobIds: string[]): Promise<Map<string, numbe
     counts_unit AS (
       SELECT d, unit, count(*)::float AS njobs FROM day_jobs GROUP BY d, unit
     ),
-    counts_all AS (
-      SELECT d, count(*)::float AS njobs FROM day_jobs GROUP BY d
+    -- fixed items matched to the day-jobs they cover (their units, or all)
+    item_days AS (
+      SELECT o.id AS item, o."monthlyAmount", o."period", dj.d, dj.job
+      FROM "OverheadItem" o
+      JOIN day_jobs dj ON o."effectiveFrom" <= dj.d
+        AND (o."endedAt" IS NULL OR o."endedAt" >= dj.d)
+        AND (
+          NOT EXISTS (SELECT 1 FROM "OverheadItemUnit" iu WHERE iu."itemId" = o.id)
+          OR EXISTS (
+            SELECT 1 FROM "OverheadItemUnit" iu
+            WHERE iu."itemId" = o.id AND iu."unitId" = dj.unit
+          )
+        )
+    ),
+    item_day_pool AS (
+      SELECT item, d, count(*)::float AS njobs FROM item_days GROUP BY item, d
+    ),
+    -- worker ESI/PF: which jobs each worker touched per day
+    emp_days AS (
+      SELECT DISTINCT
+        (l."startedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date AS d,
+        l."employeeId" AS emp,
+        l."jobId" AS job
+      FROM "TimeLog" l
+      WHERE l."jobId" IS NOT NULL
+    ),
+    emp_day_pool AS (
+      SELECT d, emp, count(*)::float AS njobs FROM emp_days GROUP BY d, emp
     ),
     parts AS (
       -- punched-in supervisor salaries
@@ -51,25 +79,21 @@ export async function overheadByJob(jobIds: string[]): Promise<Map<string, numbe
 
       UNION ALL
 
-      -- unit-specific fixed overheads (rent, electricity, ...)
-      SELECT dj.job,
-        (o."monthlyAmount" / (CASE WHEN o."period" = 'ANNUAL' THEN 360.0 ELSE 30.0 END)) / cu.njobs
-      FROM day_jobs dj
-      JOIN counts_unit cu ON cu.d = dj.d AND cu.unit = dj.unit
-      JOIN "OverheadItem" o ON o."unitId" = dj.unit
-        AND o."effectiveFrom" <= dj.d
-        AND (o."endedAt" IS NULL OR o."endedAt" >= dj.d)
+      -- fixed overheads over their selected units' pooled jobs
+      SELECT idr.job,
+        (idr."monthlyAmount" / (CASE WHEN idr."period" = 'ANNUAL' THEN 360.0 ELSE 30.0 END))
+          / p.njobs
+      FROM item_days idr
+      JOIN item_day_pool p ON p.item = idr.item AND p.d = idr.d
 
       UNION ALL
 
-      -- company-wide fixed overheads, spread over all units' jobs that day
-      SELECT dj.job,
-        (o."monthlyAmount" / (CASE WHEN o."period" = 'ANNUAL' THEN 360.0 ELSE 30.0 END)) / ca.njobs
-      FROM day_jobs dj
-      JOIN counts_all ca ON ca.d = dj.d
-      JOIN "OverheadItem" o ON o."unitId" IS NULL
-        AND o."effectiveFrom" <= dj.d
-        AND (o."endedAt" IS NULL OR o."endedAt" >= dj.d)
+      -- worker ESI/PF lump sums over the jobs that worker was on that day
+      SELECT ed.job, (e."esiPfMonthly" / 30.0) / ep.njobs
+      FROM emp_days ed
+      JOIN emp_day_pool ep ON ep.d = ed.d AND ep.emp = ed.emp
+      JOIN "Employee" e ON e.id = ed.emp
+      WHERE e."esiPfMonthly" IS NOT NULL
     )
     SELECT job AS "jobId", sum(amt)::float AS overhead
     FROM parts

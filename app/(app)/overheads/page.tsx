@@ -19,7 +19,7 @@ export default async function OverheadsPage() {
   const [units, items] = await Promise.all([
     db.unit.findMany({ orderBy: { name: "asc" } }),
     db.overheadItem.findMany({
-      include: { unit: { select: { name: true } } },
+      include: { units: { include: { unit: { select: { code: true, name: true } } } } },
       orderBy: [{ endedAt: "asc" }, { createdAt: "desc" }],
     }),
   ]);
@@ -29,6 +29,10 @@ export default async function OverheadsPage() {
   const perDay = (i: { monthlyAmount: number; period: string }) =>
     i.monthlyAmount / (i.period === "ANNUAL" ? 360 : 30);
   const perLabel = (i: { period: string }) => (i.period === "ANNUAL" ? "/yr" : "/mo");
+  const unitsLabel = (i: { units: { unit: { code: string } }[] }) =>
+    i.units.length === 0 || i.units.length === units.length
+      ? "All units"
+      : i.units.map((x) => x.unit.code).sort().join(", ");
   const dailyTotal = running.reduce((s, i) => s + perDay(i), 0);
 
   return (
@@ -82,17 +86,19 @@ export default async function OverheadsPage() {
             <option value="ANNUAL">per year</option>
           </select>
         </label>
-        <label className="text-sm">
-          <span className="block text-xs text-slate-500 mb-0.5">Applies to</span>
-          <select name="unitId" className="rounded-lg border border-slate-300 px-2 py-1.5">
-            <option value="">All units (company-wide)</option>
+        <div className="text-sm">
+          <span className="block text-xs text-slate-500 mb-0.5">
+            Applies to (tick 1, 2 or all — none ticked = all units)
+          </span>
+          <div className="flex flex-wrap gap-3 rounded-lg border border-slate-300 px-2 py-1.5">
             {units.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
+              <label key={u.id} className="flex items-center gap-1.5 whitespace-nowrap">
+                <input type="checkbox" name="unitIds" value={u.id} className="h-4 w-4" />
+                {u.code}
+              </label>
             ))}
-          </select>
-        </label>
+          </div>
+        </div>
         <label className="text-sm">
           <span className="block text-xs text-slate-500 mb-0.5">Counted from</span>
           <input
@@ -151,7 +157,7 @@ export default async function OverheadsPage() {
                 <td className="px-4 py-3 whitespace-nowrap text-slate-500">
                   {formatMoney(perDay(i))}
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap">{i.unit?.name ?? "All units"}</td>
+                <td className="px-4 py-3 whitespace-nowrap">{unitsLabel(i)}</td>
                 <td className="px-4 py-3 whitespace-nowrap">{formatDate(i.effectiveFrom)}</td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1.5">
@@ -200,7 +206,7 @@ export default async function OverheadsPage() {
               <li key={i.id} className="flex flex-wrap items-center gap-2">
                 <span className="font-medium text-slate-700">{i.name}</span>
                 <span>{formatMoney(i.monthlyAmount)}{perLabel(i)}</span>
-                <span>· {i.unit?.name ?? "All units"}</span>
+                <span>· {unitsLabel(i)}</span>
                 <span>
                   · {formatDate(i.effectiveFrom)} – {formatDate(i.endedAt!)}
                 </span>

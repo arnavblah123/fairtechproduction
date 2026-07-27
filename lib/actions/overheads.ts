@@ -13,20 +13,27 @@ export async function addOverheadItem(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const monthlyAmount = Number(String(formData.get("monthlyAmount") ?? "").trim());
   const period = String(formData.get("period") ?? "MONTHLY") === "ANNUAL" ? "ANNUAL" : "MONTHLY";
-  const unitId = String(formData.get("unitId") ?? "") || null;
+  // Any subset of units; none ticked = all units.
+  const unitIds = formData.getAll("unitIds").map(String).filter(Boolean);
   const fromRaw = String(formData.get("effectiveFrom") ?? "");
   const effectiveFrom = fromRaw ? new Date(fromRaw) : istToday();
   if (!name || isNaN(monthlyAmount) || monthlyAmount <= 0 || monthlyAmount > 1000000000) return;
   if (isNaN(effectiveFrom.getTime())) return;
 
   const item = await db.overheadItem.create({
-    data: { name, monthlyAmount, period, unitId, effectiveFrom },
+    data: {
+      name,
+      monthlyAmount,
+      period,
+      effectiveFrom,
+      units: { create: unitIds.map((unitId) => ({ unitId })) },
+    },
   });
   await audit(user.id, "overhead.add", "OverheadItem", item.id, {
     name,
     monthlyAmount,
     period,
-    unitId,
+    unitIds,
     effectiveFrom: effectiveFrom.toISOString().slice(0, 10),
   });
   revalidatePath("/overheads");

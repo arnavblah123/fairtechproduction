@@ -80,11 +80,21 @@ model OverheadItem {
   name          String
   monthlyAmount Float // ₹ per period (month or year — see `period`)
   period        OverheadPeriod @default(MONTHLY)
-  unitId        String? // null = company-wide, spread over all units' jobs
-  unit          Unit?     @relation(fields: [unitId], references: [id])
+  // Which units this cost applies to (any subset). No rows = all units.
+  // Spread over the pooled jobs of the selected units each day.
+  units         OverheadItemUnit[]
   effectiveFrom DateTime  @db.Date
   endedAt       DateTime? @db.Date // stopped from this day on; history keeps its cost
   createdAt     DateTime  @default(now())
+}
+
+model OverheadItemUnit {
+  itemId String
+  item   OverheadItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  unitId String
+  unit   Unit         @relation(fields: [unitId], references: [id])
+
+  @@id([itemId, unitId])
 }
 
 model UserUnit {
@@ -116,7 +126,7 @@ model Unit {
   futureJobs   FutureJob[]
   plans        Plan[]
   supervisorDays SupervisorDay[]
-  overheadItems  OverheadItem[]
+  overheadItemUnits OverheadItemUnit[]
 }
 
 model Employee {
@@ -127,6 +137,7 @@ model Employee {
   skill         String // welder, fitter, helper, ...
   contact       String?
   hourlyWage    Float? // ₹ per hour — set and seen by the owner only, drives per-job labour cost
+  esiPfMonthly  Float? // ₹ per month ESI/PF lump sum — owner only; ÷30 per worked day, split over the jobs the worker was on that day
   primaryUnitId String
   primaryUnit   Unit    @relation(fields: [primaryUnitId], references: [id])
   active        Boolean @default(true)
@@ -214,6 +225,10 @@ model Job {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
+  // Asked at creation: is all material available? "No" also auto-raises a
+  // MATERIAL_SHORTAGE issue with what's needed and by when.
+  materialReady Boolean @default(true)
+
   stages      Stage[]
   timeLogs    TimeLog[]
   issues      Issue[]
@@ -221,6 +236,7 @@ model Job {
   reworks     StageRework[]
   tests       JobTest[]
   planItems   PlanItem[]
+  craneLogs   CraneLog[]
 
   @@index([unitId, status])
 }
@@ -341,6 +357,8 @@ model CraneLog {
   unitId      String
   unit        Unit         @relation(fields: [unitId], references: [id])
   purpose     WorkActivity // MATERIAL_HANDLING or DISPATCH
+  jobId       String? // which job the crane was called for (null = general)
+  job         Job?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
   note        String?
   startedAt   DateTime     @default(now())
   endedAt     DateTime?

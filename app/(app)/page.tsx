@@ -95,6 +95,7 @@ export default async function DashboardPage({
     }),
     db.craneLog.findMany({
       where: { endedAt: null, unitId: { in: units.map((u) => u.id) } },
+      include: { job: { select: { jobNumber: true, clientName: true } } },
       orderBy: { startedAt: "asc" },
     }),
     db.employee.findMany({
@@ -597,6 +598,9 @@ export default async function DashboardPage({
                           🏗 Outside crane{" "}
                           <span className="text-orange-600">
                             ({crane.purpose === "DISPATCH" ? "Dispatch" : "Material Handling"}
+                            {crane.job
+                              ? ` — ${jobCode(crane.job.jobNumber)} ${crane.job.clientName}`
+                              : ""}
                             {crane.note ? ` — ${crane.note}` : ""})
                           </span>
                         </span>
@@ -623,6 +627,22 @@ export default async function DashboardPage({
                       >
                         <option value="MATERIAL_HANDLING">For Material Handling</option>
                         <option value="DISPATCH">For Dispatch</option>
+                      </select>
+                      <select
+                        name="jobId"
+                        required
+                        defaultValue=""
+                        className="flex-1 min-w-28 rounded-lg border border-slate-300 px-1.5 py-1.5 text-xs"
+                      >
+                        <option value="" disabled>
+                          For which job?
+                        </option>
+                        {allUnitJobs.map((j) => (
+                          <option key={j.id} value={j.id}>
+                            {jobCode(j.jobNumber)} {j.clientName}
+                          </option>
+                        ))}
+                        <option value="none">Not for one job (general)</option>
                       </select>
                       <input
                         name="note"
