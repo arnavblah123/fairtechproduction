@@ -272,6 +272,52 @@ export async function updateJob(
   return undefined;
 }
 
+// Dispatched ✓ — supervisors included. Requires the PO value (without GST);
+// closes the job, keeps all data, and emails the owner the full cost
+// breakdown against that PO value.
+export async function dispatchJob(formData: FormData) {
+  const user = await requireUser();
+  const jobId = String(formData.get("jobId") ?? "");
+  const poValue = Number(String(formData.get("poValue") ?? "").trim());
+  const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
+  assertUnitAccess(user, job.unitId);
+  if (job.status !== "READY_TO_DISPATCH") {
+    throw new Error("Only jobs in Ready to Dispatch can be marked dispatched.");
+  }
+  if (isNaN(poValue) || poValue <= 0) {
+    throw new Error("Enter the job's PO value (without GST).");
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.job.update({
+      where: { id: jobId },
+      data: { status: "COMPLETED", completedAt: new Date(), poValue },
+    });
+    const open = await tx.timeLog.findMany({ where: { jobId, endedAt: null } });
+    for (const log of open) {
+      await tx.timeLog.update({
+        where: { id: log.id },
+        data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
+      });
+    }
+    await audit(user.id, "job.dispatch", "Job", jobId, { poValue }, tx);
+  });
+
+  // Owner's cost-breakdown email — best-effort, never blocks the dispatch.
+  try {
+    const { buildDispatchCostEmail } = await import("@/lib/cost-report");
+    const { sendOwnerEmail } = await import("@/lib/email");
+    const mail = await buildDispatchCostEmail(jobId);
+    if (mail) await sendOwnerEmail(mail.subject, mail.html);
+  } catch (err) {
+    console.error("dispatch email failed:", err);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobId}`);
+}
+
 export async function setJobStatus(formData: FormData) {
   const user = await requireUser();
   const jobId = String(formData.get("jobId") ?? "");

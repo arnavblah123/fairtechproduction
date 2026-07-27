@@ -228,6 +228,9 @@ model Job {
   // Asked at creation: is all material available? "No" also auto-raises a
   // MATERIAL_SHORTAGE issue with what's needed and by when.
   materialReady Boolean @default(true)
+  // PO value without GST, entered by the supervisor at Dispatched ✓ —
+  // the owner's cost email compares it against the job's total cost.
+  poValue Float?
 
   stages      Stage[]
   timeLogs    TimeLog[]

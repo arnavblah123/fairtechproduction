@@ -9,8 +9,7 @@ import {
 import { LiveDuration } from "@/components/live-duration";
 import { formatDate, formatDateTime, jobCode, ACTIVITY_LABELS } from "@/lib/format";
 import { assignGeneralDuty, assignDispatchWorker, stopWorker } from "@/lib/actions/stages";
-import { setJobStatus, setJobRank } from "@/lib/actions/jobs";
-import { isAdmin } from "@/lib/permissions";
+import { setJobRank, dispatchJob } from "@/lib/actions/jobs";
 import { startCrane, stopCrane } from "@/lib/actions/crane";
 import { setShiftPlan } from "@/lib/actions/stages";
 import { closeOverdueShifts, shiftPlanLabel } from "@/lib/shift";
@@ -279,12 +278,12 @@ export default async function DashboardPage({
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <p className="font-medium">
-                              {job.clientName}
+                              {job.description}
                               <span className="text-slate-400 font-normal text-sm ml-2">
                                 {jobCode(job.jobNumber)}
                               </span>
                             </p>
-                            <p className="text-sm text-slate-500">{job.description}</p>
+                            <p className="text-sm text-slate-500">{job.clientName}</p>
                           </div>
                           <div className="flex flex-col items-end gap-1">
                             <JobStatusBadge status={job.status} />
@@ -378,9 +377,9 @@ export default async function DashboardPage({
                           {i + 1}
                         </span>
                         <Link href={`/jobs/${job.id}`} className="font-medium hover:underline min-w-0">
-                          {job.clientName}
+                          {job.description}
                           <span className="text-slate-400 font-normal text-xs ml-1">
-                            {jobCode(job.jobNumber)}
+                            {jobCode(job.jobNumber)} · {job.clientName}
                           </span>
                         </Link>
                         <span className="text-xs text-slate-500 whitespace-nowrap">
@@ -418,9 +417,9 @@ export default async function DashboardPage({
                         <div key={job.id} className="bg-white rounded-lg p-2.5 space-y-1.5 shadow-sm">
                           <div className="flex items-start justify-between gap-2">
                             <Link href={`/jobs/${job.id}`} className="font-medium text-sm hover:underline">
-                              {job.clientName}
+                              {job.description}
                               <span className="text-slate-400 font-normal text-xs ml-1">
-                                {jobCode(job.jobNumber)}
+                                {jobCode(job.jobNumber)} · {job.clientName}
                               </span>
                             </Link>
                             {job.estimatedDispatchAt && (
@@ -476,19 +475,28 @@ export default async function DashboardPage({
                                 Go
                               </button>
                             </form>
-                            {isAdmin(user) && (
-                              <form action={setJobStatus}>
-                                <input type="hidden" name="jobId" value={job.id} />
-                                <input type="hidden" name="status" value="COMPLETED" />
-                                <button
-                                  className="rounded-lg bg-green-600 text-white px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
-                                  title="Job has left the factory — removes it from here; all data stays in History"
-                                >
-                                  Dispatched ✓
-                                </button>
-                              </form>
-                            )}
                           </div>
+                          {/* Dispatched ✓ — asks for the PO value (no GST);
+                              the owner gets the full cost breakdown by email */}
+                          <form action={dispatchJob} className="flex gap-1.5">
+                            <input type="hidden" name="jobId" value={job.id} />
+                            <input
+                              name="poValue"
+                              type="number"
+                              min={1}
+                              step="0.01"
+                              required
+                              placeholder="PO value without GST ₹ *"
+                              className="flex-1 min-w-0 rounded-lg border border-green-300 px-2 py-1.5 text-xs"
+                              title="The job's PO value excluding GST — required to dispatch"
+                            />
+                            <button
+                              className="rounded-lg bg-green-600 text-white px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
+                              title="Job has left the factory — removes it from here; all data stays in History"
+                            >
+                              Dispatched ✓
+                            </button>
+                          </form>
                         </div>
                       );
                     })}

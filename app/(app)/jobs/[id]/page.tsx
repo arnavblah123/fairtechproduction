@@ -261,7 +261,7 @@ export default async function JobPage({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-bold">{job.clientName}</h1>
+              <h1 className="text-xl font-bold">{job.description}</h1>
               <span className="text-slate-400">{jobCode(job.jobNumber)}</span>
               <JobStatusBadge status={job.status} />
               {job.priority && <PriorityBadge />}
@@ -277,7 +277,7 @@ export default async function JobPage({
                 </span>
               )}
             </div>
-            <p className="text-slate-600 mt-1">{job.description}</p>
+            <p className="text-slate-600 mt-1">{job.clientName}</p>
             <dl className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1 text-sm">
               <div>
                 <dt className="text-xs text-slate-400">Unit</dt>
