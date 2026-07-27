@@ -151,6 +151,11 @@ export async function stopWorker(formData: FormData) {
   if (log.jobId) revalidateJob(log.jobId);
   revalidatePath("/");
   revalidatePath("/employees");
+  // Stopping someone off a stage from the job page opens the same
+  // "where are you shifting them?" popup as Pause/Done.
+  if (formData.get("askShift") === "1" && log.jobId && log.stageId) {
+    redirect(`/jobs/${log.jobId}?shift=${log.employeeId}`);
+  }
 }
 
 // Put a worker on a general duty — material handling or dispatch — for a

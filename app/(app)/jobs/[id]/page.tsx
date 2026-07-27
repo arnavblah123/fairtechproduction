@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, canAccessUnit, isAdmin } from "@/lib/permissions";
 import { setJobStatus, deleteJob, finalDone } from "@/lib/actions/jobs";
-import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework, shiftWorker, setShiftPlan, setStageDue } from "@/lib/actions/stages";
+import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework, setShiftPlan, setStageDue } from "@/lib/actions/stages";
 import { shiftPlanLabel } from "@/lib/shift";
 import { raiseIssue, resolveIssue } from "@/lib/actions/issues";
 import { addJobTest, deleteJobTest } from "@/lib/actions/tests";
@@ -19,6 +19,7 @@ import { googleCalendarLink, isCalendarConfigured } from "@/lib/google-calendar"
 import { AttachmentUpload } from "@/components/attachment-upload";
 import { QuickAddEmployee } from "@/components/quick-add-employee";
 import { SearchSelect } from "@/components/search-select";
+import { ShiftWorkerRow } from "@/components/shift-worker-row";
 import { deleteAttachment } from "@/lib/actions/attachments";
 import { ATTACHMENT_KIND_LABELS, formatFileSize } from "@/lib/attachments";
 import { workedByStage, fmtWorked } from "@/lib/idle";
@@ -171,7 +172,41 @@ export default async function JobPage({
         orderBy: { name: "asc" },
       })
     : [];
-  const shiftTargets = job.stages.filter((s) => s.status !== "DONE");
+  // Destinations for the shift popup: every open job of this unit (same job
+  // first) with its unfinished stages, plus the general duties.
+  const shiftJobsRaw = shiftEmployees.length
+    ? await db.job.findMany({
+        where: {
+          unitId: job.unitId,
+          status: { in: ["NOT_STARTED", "IN_PROGRESS", "ON_HOLD"] },
+        },
+        select: {
+          id: true,
+          jobNumber: true,
+          clientName: true,
+          description: true,
+          stages: {
+            where: { status: { not: "DONE" } },
+            orderBy: { sequence: "asc" },
+            select: { id: true, name: true, sequence: true },
+          },
+        },
+        orderBy: { jobNumber: "asc" },
+      })
+    : [];
+  const shiftJobOptions = [
+    ...shiftJobsRaw.filter((j) => j.id === job.id),
+    ...shiftJobsRaw.filter((j) => j.id !== job.id),
+  ]
+    .filter((j) => j.stages.length > 0)
+    .map((j) => ({
+      id: j.id,
+      label:
+        j.id === job.id
+          ? `Same job — ${j.description} (${jobCode(j.jobNumber)})`
+          : `${j.description} · ${jobCode(j.jobNumber)} ${j.clientName}`,
+      stages: j.stages.map((s) => ({ id: s.id, label: `${s.sequence}. ${s.name}` })),
+    }));
 
   // Live idle indicator: in progress but nobody clocked on right now.
   const openLogCount = job.stages.reduce((n, s) => n + s.timeLogs.length, 0);
@@ -202,48 +237,18 @@ export default async function JobPage({
           </div>
           <div className="space-y-2">
             {shiftEmployees.map((emp) => (
-              <form
+              <ShiftWorkerRow
                 key={emp.id}
-                action={shiftWorker}
-                className="flex flex-wrap items-center gap-2 bg-blue-500/40 rounded-lg px-3 py-2"
-              >
-                <input type="hidden" name="employeeId" value={emp.id} />
-                <input type="hidden" name="jobId" value={job.id} />
-                <input
-                  type="hidden"
-                  name="remaining"
-                  value={shiftIds.filter((x) => x !== emp.id).join(",")}
-                />
-                <span className="font-medium min-w-32">
-                  {emp.name}
-                  <span className="text-blue-200 text-xs font-normal"> ({emp.skill})</span>
-                </span>
-                <SearchSelect
-                  name="target"
-                  required
-                  className="flex-1 min-w-40"
-                  placeholder="Next work — type to search…"
-                  options={[
-                    ...shiftTargets.map((s) => ({
-                      value: `stage:${s.id}`,
-                      label: `${s.sequence}. ${s.name}`,
-                      group: "This job's stages",
-                    })),
-                    { value: "duty:MATERIAL_HANDLING", label: "🚚 Material Handling", group: "General duties" },
-                    { value: "duty:DISPATCH", label: "📦 Dispatch", group: "General duties" },
-                    { value: "duty:PLATE_CUTTING", label: "🔥 Plate Cutting", group: "General duties" },
-                    { value: "duty:STRUCTURAL_CUTTING", label: "🔩 Structural Cutting", group: "General duties" },
-                    { value: "none", label: "Nothing for now (leave stopped)" },
-                  ]}
-                />
-                <button className="rounded-lg bg-white text-blue-700 px-3 py-1.5 text-sm font-semibold">
-                  Shift
-                </button>
-              </form>
+                employee={{ id: emp.id, name: emp.name, skill: emp.skill }}
+                jobs={shiftJobOptions}
+                currentJobId={job.id}
+                remaining={shiftIds.filter((x) => x !== emp.id).join(",")}
+              />
             ))}
           </div>
           <p className="text-xs text-blue-200 mt-2">
-            To move someone to a different job, open that job and assign them there.
+            First pick the job (or duty), then the stage. Going nowhere for now?
+            Just tap ✕ — the worker stays stopped.
           </p>
         </section>
         </div>
@@ -477,7 +482,7 @@ export default async function JobPage({
                 >
                   {job.status === "READY_TO_DISPATCH"
                     ? "Update dispatch date"
-                    : "🏁 Final Done"}
+                    : "🚚 Ready to Dispatch"}
                 </summary>
                 <form
                   action={finalDone}
@@ -499,7 +504,7 @@ export default async function JobPage({
                   <button className="w-full rounded-lg bg-cyan-600 text-white py-1.5 text-sm font-medium">
                     {job.status === "READY_TO_DISPATCH"
                       ? "Save date"
-                      : "Confirm: production finished"}
+                      : "Confirm: Ready to Dispatch"}
                   </button>
                   {job.status !== "READY_TO_DISPATCH" && (
                     <p className="text-[11px] text-slate-500">
@@ -508,15 +513,6 @@ export default async function JobPage({
                   )}
                 </form>
               </details>
-            )}
-            {admin && job.status !== "COMPLETED" && (
-              <form action={setJobStatus}>
-                <input type="hidden" name="jobId" value={job.id} />
-                <input type="hidden" name="status" value="COMPLETED" />
-                <button className={`${btn} bg-green-100 text-green-800 hover:bg-green-200`}>
-                  Mark Completed
-                </button>
-              </form>
             )}
             {admin && (
               <Link href={`/jobs/${job.id}/edit`} className={`${btn} bg-slate-100 hover:bg-slate-200`}>
@@ -876,6 +872,7 @@ export default async function JobPage({
                         </span>
                         <form action={stopWorker}>
                           <input type="hidden" name="timeLogId" value={log.id} />
+                          <input type="hidden" name="askShift" value="1" />
                           <button
                             className="text-xs font-medium text-red-600 rounded-lg px-2.5 py-1.5 hover:bg-red-50 active:bg-red-100"
                             title="Stop this worker's clock"
