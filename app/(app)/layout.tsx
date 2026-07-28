@@ -12,6 +12,10 @@ export default async function AppLayout({
   const user = await requireUser();
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
   const isHr = user.role === "HR";
+  // Fairtech Store (consumables app) — its own Vercel deployment; owner-only
+  // link. Override the URL with CONSUMABLES_URL if the project name differs.
+  const storeUrl =
+    process.env.CONSUMABLES_URL ?? "https://fairtechconsumablesystem.vercel.app";
 
   // HR accounts get exactly one page: Labour.
   const links = isHr
@@ -24,6 +28,7 @@ export default async function AppLayout({
         { href: "/issues", label: "Issues" },
         { href: "/planning", label: "Planning" },
         ...(user.role === "SUPERADMIN" ? [{ href: "/labour", label: "Labour" }] : []),
+        ...(user.role === "SUPERADMIN" ? [{ href: storeUrl, label: "Store" }] : []),
         { href: "/history", label: "History" },
         { href: "/discipline", label: "Discipline" },
         { href: "/attendance", label: "Attendance" },

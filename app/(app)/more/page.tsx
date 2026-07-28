@@ -18,6 +18,13 @@ export default async function MorePage() {
     : [
     { href: "/planning", label: "Production Planning", icon: "🗓️" },
     ...(user.role === "SUPERADMIN" ? [{ href: "/labour", label: "Labour App", icon: "💼" }] : []),
+    ...(user.role === "SUPERADMIN"
+      ? [{
+          href: process.env.CONSUMABLES_URL ?? "https://fairtechconsumablesystem.vercel.app",
+          label: "Consumables Store",
+          icon: "🛒",
+        }]
+      : []),
     { href: "/history", label: "Completed Job History", icon: "📊" },
     { href: "/discipline", label: "Discipline Register", icon: "⚠️" },
     ...(isAdmin ? [{ href: "/templates", label: "Process Templates", icon: "📋" }] : []),
