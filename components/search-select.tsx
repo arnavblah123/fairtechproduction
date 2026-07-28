@@ -65,12 +65,16 @@ export function SearchSelect({
           setQuery(e.target.value);
           setOpen(true);
         }}
-        className={`w-full rounded-lg border border-slate-300 bg-white text-slate-900 ${
+        className={`w-full rounded-lg border border-slate-300 ${
           small ? "px-2 py-1.5 text-xs" : "px-2 py-1.5 text-sm"
         }`}
+        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
       />
       {open && (
-        <div className="absolute z-30 mt-1 left-0 right-0 min-w-48 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white text-slate-900 shadow-lg">
+        <div
+          className="absolute z-30 mt-1 left-0 right-0 min-w-48 max-h-56 overflow-y-auto rounded-lg border border-slate-200 shadow-lg"
+          style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+        >
           {filtered.length === 0 && (
             <p className="px-3 py-2 text-xs text-slate-400">No match.</p>
           )}
@@ -95,6 +99,7 @@ export function SearchSelect({
                   className={`block w-full text-left px-3 py-2 text-sm hover:bg-blue-50 active:bg-blue-100 ${
                     o.value === value ? "bg-blue-50 font-medium" : ""
                   }`}
+                  style={{ color: "#0f172a" }}
                 >
                   {o.label}
                 </button>
