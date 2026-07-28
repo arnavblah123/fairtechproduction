@@ -12,12 +12,12 @@ export default async function MorePage() {
 
   const links = user.role === "HR"
     ? [
-        { href: "/hr", label: "HR — Wages & ESI/PF", icon: "💼" },
+        { href: "/labour", label: "Labour App", icon: "💼" },
         { href: "/account", label: "My Account & Password", icon: "⚙️" },
       ]
     : [
     { href: "/planning", label: "Production Planning", icon: "🗓️" },
-    ...(user.role === "SUPERADMIN" ? [{ href: "/hr", label: "HR — Wages & ESI/PF", icon: "💼" }] : []),
+    ...(user.role === "SUPERADMIN" ? [{ href: "/labour", label: "Labour App", icon: "💼" }] : []),
     { href: "/history", label: "Completed Job History", icon: "📊" },
     { href: "/discipline", label: "Discipline Register", icon: "⚠️" },
     ...(isAdmin ? [{ href: "/templates", label: "Process Templates", icon: "📋" }] : []),

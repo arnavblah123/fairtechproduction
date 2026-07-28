@@ -52,7 +52,7 @@ export default async function UsersPage() {
                     {u.role === "SUPERADMIN" ? (
                       "All units"
                     ) : u.role === "HR" ? (
-                      "— (HR page only)"
+                      "— (Labour app only)"
                     ) : manageable ? (
                       <form action={setUserUnits} className="flex flex-wrap items-center gap-2">
                         <input type="hidden" name="userId" value={u.id} />

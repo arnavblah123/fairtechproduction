@@ -14,10 +14,10 @@ export async function requireRole(...roles: Role[]): Promise<SessionUser> {
   return user;
 }
 
-// HR accounts exist only for the HR (wages) page — bounce them there from
-// every production page. (/labour is the separate labour-calling app.)
+// HR accounts exist only for the Labour app (served at /labour) — bounce
+// them there from every production page.
 export function lockHrToLabour(user: SessionUser) {
-  if (user.role === "HR") redirect("/hr");
+  if (user.role === "HR") redirect("/labour");
 }
 
 export function isAdmin(user: SessionUser) {
