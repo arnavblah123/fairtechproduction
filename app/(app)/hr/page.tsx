@@ -5,9 +5,9 @@ import { formatMoney } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-// Labour rates register — owner and HR only. Hourly wages and monthly
-// ESI/PF per worker; these drive job labour costs and overheads. HR
-// accounts can access only this page.
+// HR page — owner and HR only. Hourly wages and monthly ESI/PF per
+// worker; these drive job labour costs and overheads. HR accounts can
+// access only this page (plus the separate /labour calling app).
 export default async function LabourPage({
   searchParams,
 }: {
@@ -42,8 +42,11 @@ export default async function LabourPage({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-bold">💼 Labour — Wages &amp; ESI/PF</h1>
-        <div className="flex gap-2 text-sm">
+        <h1 className="text-xl font-bold">💼 HR — Wages &amp; ESI/PF</h1>
+        <div className="flex gap-2 text-sm items-center">
+          <a href="/labour" className="text-blue-600 hover:underline">
+            Labour Calling app →
+          </a>
           <span className="bg-white rounded-lg px-3 py-1.5 shadow-sm">
             <b>{withWage}</b>/{employees.length} wages set
           </span>

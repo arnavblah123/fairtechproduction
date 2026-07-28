@@ -33,7 +33,7 @@ export function UserCreateForm({
         <select name="role" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
           <option value="SUPERVISOR">Supervisor</option>
           {canCreateAdmins && <option value="ADMIN">Admin</option>}
-          {canCreateAdmins && <option value="HR">HR (Labour page only)</option>}
+          {canCreateAdmins && <option value="HR">HR (wages page only)</option>}
         </select>
       </div>
       <div className="flex flex-wrap gap-3 items-center text-sm">

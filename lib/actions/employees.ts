@@ -134,7 +134,7 @@ export async function setEmployeeWage(formData: FormData) {
   await db.employee.update({ where: { id: employeeId }, data: { hourlyWage } });
   await audit(user.id, "employee.wage", "Employee", employeeId, { hourlyWage });
   revalidatePath("/employees");
-  revalidatePath("/labour");
+  revalidatePath("/hr");
 }
 
 // ESI/PF monthly lump sum — owner only. Spread as overheads: ÷30 per day
@@ -153,7 +153,7 @@ export async function setEmployeeEsiPf(formData: FormData) {
   await db.employee.update({ where: { id: employeeId }, data: { esiPfMonthly } });
   await audit(user.id, "employee.esiPf", "Employee", employeeId, { esiPfMonthly });
   revalidatePath("/employees");
-  revalidatePath("/labour");
+  revalidatePath("/hr");
 }
 
 export async function setEmployeeActive(formData: FormData) {

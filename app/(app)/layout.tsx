@@ -15,7 +15,7 @@ export default async function AppLayout({
 
   // HR accounts get exactly one page: Labour.
   const links = isHr
-    ? [{ href: "/labour", label: "Labour" }]
+    ? [{ href: "/hr", label: "HR — Wages" }]
     : [
         { href: "/", label: "Dashboard" },
         { href: "/jobs", label: "Jobs" },
@@ -23,7 +23,7 @@ export default async function AppLayout({
         { href: "/employees", label: "Employees" },
         { href: "/issues", label: "Issues" },
         { href: "/planning", label: "Planning" },
-        ...(user.role === "SUPERADMIN" ? [{ href: "/labour", label: "Labour" }] : []),
+        ...(user.role === "SUPERADMIN" ? [{ href: "/hr", label: "HR — Wages" }] : []),
         { href: "/history", label: "History" },
         { href: "/discipline", label: "Discipline" },
         { href: "/attendance", label: "Attendance" },

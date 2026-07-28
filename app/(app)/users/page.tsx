@@ -52,7 +52,7 @@ export default async function UsersPage() {
                     {u.role === "SUPERADMIN" ? (
                       "All units"
                     ) : u.role === "HR" ? (
-                      "— (Labour page only)"
+                      "— (HR page only)"
                     ) : manageable ? (
                       <form action={setUserUnits} className="flex flex-wrap items-center gap-2">
                         <input type="hidden" name="userId" value={u.id} />
@@ -165,7 +165,7 @@ export default async function UsersPage() {
                             >
                               <option value="ADMIN">Admin</option>
                               <option value="SUPERVISOR">Supervisor</option>
-                              <option value="HR">HR (Labour only)</option>
+                              <option value="HR">HR</option>
                             </select>
                             <button className="rounded bg-slate-900 text-white px-2 py-1 text-xs">
                               Set role
