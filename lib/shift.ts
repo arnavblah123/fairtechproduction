@@ -3,8 +3,8 @@ import { audit } from "@/lib/audit";
 import { Prisma } from "@prisma/client";
 
 // Night-plan cutoffs (IST): "till 8 PM" = 20:00, "till 10 PM" = 22:00,
-// "full night" = 02:30. Full-night shifts closed at their cutoff earn a
-// +4 hour OT credit in all hour/cost totals.
+// "till 1 AM" = 01:00, "full night" = 02:30. Full-night shifts closed at
+// their cutoff earn a +4 hour OT credit in all hour/cost totals.
 const IST_MS = 5.5 * 3600e3;
 
 // Next occurrence of an IST wall-clock time as a real Date.
@@ -17,16 +17,20 @@ export function nextIstTime(hour: number, minute: number): Date {
   return target;
 }
 
-export function shiftPlanEnd(plan: "EIGHT_PM" | "TEN_PM" | "FULL_NIGHT"): Date {
+export function shiftPlanEnd(plan: "EIGHT_PM" | "TEN_PM" | "ONE_AM" | "FULL_NIGHT"): Date {
   if (plan === "EIGHT_PM") return nextIstTime(20, 0);
-  return plan === "TEN_PM" ? nextIstTime(22, 0) : nextIstTime(2, 30);
+  if (plan === "TEN_PM") return nextIstTime(22, 0);
+  if (plan === "ONE_AM") return nextIstTime(1, 0);
+  return nextIstTime(2, 30);
 }
 
-// Label a stored plannedEndAt for display ("8 PM" / "10 PM" / "2:30 AM").
+// Label a stored plannedEndAt for display.
 export function shiftPlanLabel(plannedEndAt: Date): string {
   const istHour = new Date(plannedEndAt.getTime() + IST_MS).getUTCHours();
   if (istHour === 20) return "till 8 PM";
-  return istHour === 22 ? "till 10 PM" : "full night (2:30 AM)";
+  if (istHour === 22) return "till 10 PM";
+  if (istHour === 1) return "till 1 AM";
+  return "full night (2:30 AM)";
 }
 
 // Close every open clock whose cutoff has passed — the recorded end time is

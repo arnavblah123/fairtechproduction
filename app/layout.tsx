@@ -20,6 +20,10 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#0f172a",
+  // The app is designed light-only. "only light" opts out of Android
+  // Chrome's auto-dark, which was repainting dropdowns white-on-white on
+  // phones in dark mode.
+  colorScheme: "only light",
 };
 
 export default function RootLayout({

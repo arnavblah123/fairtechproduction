@@ -893,14 +893,18 @@ export default async function JobPage({
                                 ? "EIGHT_PM"
                                 : shiftPlanLabel(log.plannedEndAt).includes("10 PM")
                                 ? "TEN_PM"
+                                : shiftPlanLabel(log.plannedEndAt).includes("1 AM")
+                                ? "ONE_AM"
                                 : "FULL_NIGHT"
                               : "NORMAL"
                           }
-                          className="flex-1 min-w-0 rounded border border-slate-200 px-1.5 py-1 text-[11px] text-slate-600"
+                          className="flex-1 min-w-0 rounded border border-slate-200 px-1.5 py-1 text-[11px]"
+                          style={{ backgroundColor: "#ffffff", color: "#0f172a", colorScheme: "only light" }}
                         >
                           <option value="NORMAL">Normal day</option>
                           <option value="EIGHT_PM">Till 8 PM</option>
                           <option value="TEN_PM">Till 10 PM</option>
+                          <option value="ONE_AM">Till 1 AM</option>
                           <option value="FULL_NIGHT">Full night (2:30 AM, +4h OT)</option>
                         </select>
                         <button className="rounded bg-slate-100 px-1.5 py-1 text-[11px]" title="Save plan">

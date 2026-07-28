@@ -331,7 +331,7 @@ export async function setShiftPlan(formData: FormData) {
 
   const { shiftPlanEnd } = await import("@/lib/shift");
   const plannedEndAt =
-    plan === "EIGHT_PM" || plan === "TEN_PM" || plan === "FULL_NIGHT"
+    plan === "EIGHT_PM" || plan === "TEN_PM" || plan === "ONE_AM" || plan === "FULL_NIGHT"
       ? shiftPlanEnd(plan)
       : null;
   await db.timeLog.update({ where: { id: timeLogId }, data: { plannedEndAt } });

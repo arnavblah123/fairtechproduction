@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Light-only app: stops Android Chrome auto-dark from repainting form
+   controls and dropdowns (white text on white). */
+:root {
+  color-scheme: only light;
+}
+
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
