@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    // The labour calling app is served as static files from public/labour;
+    // this makes the friendly /labour URL land on its entry point.
+    return [
+      { source: "/labour", destination: "/labour/index.html", permanent: false },
+      { source: "/labour/", destination: "/labour/index.html", permanent: false },
+    ];
+  },
   experimental: {
     serverActions: {
       // Drawings/BOM uploads go through server actions; allow a few files

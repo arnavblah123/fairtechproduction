@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db as prisma } from "@/lib/db";
+import { verifySessionToken, COOKIE_NAME } from "@/lib/session-token";
 
 // Integration endpoint for the Fairtech Labour app (recruitment/calling
 // system on GitHub Pages). Browser-called, so it needs CORS.
@@ -27,18 +28,20 @@ function corsHeaders(req: NextRequest): Record<string, string> {
   };
 }
 
-function unauthorized(req: NextRequest) {
+async function unauthorized(req: NextRequest) {
+  // Two ways in: a logged-in production user's session cookie (the labour
+  // app served from /labour uses this — no key needed), or the shared
+  // integration key for external callers (e.g. the GitHub Pages copy).
+  const token = req.cookies.get(COOKIE_NAME)?.value;
+  if (token && (await verifySessionToken(token))) return null;
+
   const key = process.env.INTEGRATION_EXPORT_KEY;
-  if (!key) {
-    return NextResponse.json(
-      { error: "INTEGRATION_EXPORT_KEY is not configured on the production app" },
-      { status: 503, headers: corsHeaders(req) }
-    );
-  }
-  if (req.headers.get("x-integration-key") !== key) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders(req) });
-  }
-  return null;
+  if (key && req.headers.get("x-integration-key") === key) return null;
+
+  return NextResponse.json(
+    { error: "Unauthorized — log in to the production app or send a valid integration key" },
+    { status: 401, headers: corsHeaders(req) }
+  );
 }
 
 export async function OPTIONS(req: NextRequest) {
@@ -46,7 +49,7 @@ export async function OPTIONS(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const denied = unauthorized(req);
+  const denied = await unauthorized(req);
   if (denied) return denied;
 
   const [units, employees] = await Promise.all([
@@ -109,7 +112,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const denied = unauthorized(req);
+  const denied = await unauthorized(req);
   if (denied) return denied;
 
   let body: { name?: string; skill?: string; contact?: string; unitCode?: string };
