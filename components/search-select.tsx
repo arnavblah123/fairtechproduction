@@ -65,12 +65,12 @@ export function SearchSelect({
           setQuery(e.target.value);
           setOpen(true);
         }}
-        className={`w-full rounded-lg border border-slate-300 ${
+        className={`w-full rounded-lg border border-slate-300 bg-white text-slate-900 ${
           small ? "px-2 py-1.5 text-xs" : "px-2 py-1.5 text-sm"
         }`}
       />
       {open && (
-        <div className="absolute z-30 mt-1 left-0 right-0 min-w-48 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+        <div className="absolute z-30 mt-1 left-0 right-0 min-w-48 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white text-slate-900 shadow-lg">
           {filtered.length === 0 && (
             <p className="px-3 py-2 text-xs text-slate-400">No match.</p>
           )}
