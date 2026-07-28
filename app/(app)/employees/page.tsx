@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { requireUser, isAdmin } from "@/lib/permissions";
+import { requireUser, isAdmin, lockHrToLabour} from "@/lib/permissions";
 import { transferEmployee, setEmployeeActive, setBiometricId, setEmployeeWage, setEmployeeEsiPf } from "@/lib/actions/employees";
 import { QuickAddEmployee } from "@/components/quick-add-employee";
 import { DisciplineForm } from "@/components/discipline-form";
@@ -14,6 +14,7 @@ export default async function EmployeesPage({
   searchParams: Promise<{ unit?: string; q?: string; inactive?: string }>;
 }) {
   const user = await requireUser();
+  lockHrToLabour(user);
   const { unit: unitFilter, q, inactive } = await searchParams;
 
   const units = await db.unit.findMany({

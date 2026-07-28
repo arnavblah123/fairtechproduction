@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireUser, unitScope } from "@/lib/permissions";
+import { requireUser, unitScope, lockHrToLabour} from "@/lib/permissions";
 import {
   JobStatusBadge,
   IssueBadge,
@@ -37,6 +37,7 @@ export default async function DashboardPage({
   searchParams: Promise<{ unit?: string; client?: string; status?: string }>;
 }) {
   const user = await requireUser();
+  lockHrToLabour(user);
   const { unit: unitFilter, client: clientFilter, status: statusFilter } =
     await searchParams;
 

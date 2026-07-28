@@ -17,6 +17,7 @@ enum Role {
   SUPERADMIN
   ADMIN
   SUPERVISOR
+  HR // access to the Labour page (wages / ESI-PF) only
 }
 
 model User {

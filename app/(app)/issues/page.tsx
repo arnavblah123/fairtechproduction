@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireUser, unitScope } from "@/lib/permissions";
+import { requireUser, unitScope, lockHrToLabour} from "@/lib/permissions";
 import { resolveIssue } from "@/lib/actions/issues";
 import { IssueBadge } from "@/components/badges";
 import { formatDateTime, jobCode } from "@/lib/format";
@@ -13,6 +13,7 @@ export default async function IssuesPage({
   searchParams: Promise<{ show?: string }>;
 }) {
   const user = await requireUser();
+  lockHrToLabour(user);
   const { show } = await searchParams;
   const showResolved = show === "all";
 

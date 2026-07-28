@@ -11,22 +11,27 @@ export default async function AppLayout({
 }) {
   const user = await requireUser();
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
+  const isHr = user.role === "HR";
 
-  const links = [
-    { href: "/", label: "Dashboard" },
-    { href: "/jobs", label: "Jobs" },
-    ...(isAdmin ? [{ href: "/templates", label: "Templates" }] : []),
-    { href: "/employees", label: "Employees" },
-    { href: "/issues", label: "Issues" },
-    { href: "/planning", label: "Planning" },
-    { href: "/history", label: "History" },
-    { href: "/discipline", label: "Discipline" },
-    { href: "/attendance", label: "Attendance" },
-    ...(isAdmin ? [{ href: "/users", label: "Users" }] : []),
-    ...(user.role === "SUPERADMIN" ? [{ href: "/planner", label: "Scorecard" }] : []),
-    ...(user.role === "SUPERADMIN" ? [{ href: "/overheads", label: "Overheads" }] : []),
-    ...(user.role === "SUPERADMIN" ? [{ href: "/audit", label: "Audit" }] : []),
-  ];
+  // HR accounts get exactly one page: Labour.
+  const links = isHr
+    ? [{ href: "/labour", label: "Labour" }]
+    : [
+        { href: "/", label: "Dashboard" },
+        { href: "/jobs", label: "Jobs" },
+        ...(isAdmin ? [{ href: "/templates", label: "Templates" }] : []),
+        { href: "/employees", label: "Employees" },
+        { href: "/issues", label: "Issues" },
+        { href: "/planning", label: "Planning" },
+        ...(user.role === "SUPERADMIN" ? [{ href: "/labour", label: "Labour" }] : []),
+        { href: "/history", label: "History" },
+        { href: "/discipline", label: "Discipline" },
+        { href: "/attendance", label: "Attendance" },
+        ...(isAdmin ? [{ href: "/users", label: "Users" }] : []),
+        ...(user.role === "SUPERADMIN" ? [{ href: "/planner", label: "Scorecard" }] : []),
+        ...(user.role === "SUPERADMIN" ? [{ href: "/overheads", label: "Overheads" }] : []),
+        ...(user.role === "SUPERADMIN" ? [{ href: "/audit", label: "Audit" }] : []),
+      ];
 
   return (
     <div className="min-h-screen">
@@ -35,8 +40,9 @@ export default async function AppLayout({
           <Link href="/" className="font-bold whitespace-nowrap">
             Fairtech
           </Link>
-          {/* Desktop nav; phones use the bottom tab bar instead */}
-          <nav className="flex-1 overflow-x-auto hidden sm:block">
+          {/* Desktop nav; phones use the bottom tab bar instead. HR has no
+              tab bar, so their single link stays visible on phones too. */}
+          <nav className={`flex-1 overflow-x-auto ${isHr ? "" : "hidden sm:block"}`}>
             <ul className="flex gap-1 text-sm">
               {links.map((l) => (
                 <li key={l.href}>
@@ -74,7 +80,7 @@ export default async function AppLayout({
       </header>
       {/* Bottom padding on phones so content never hides behind the tab bar */}
       <main className="max-w-7xl mx-auto p-4 pb-20 sm:pb-4">{children}</main>
-      <MobileNav />
+      {!isHr && <MobileNav />}
     </div>
   );
 }

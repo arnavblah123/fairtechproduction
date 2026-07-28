@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { requireUser, unitScope, isAdmin } from "@/lib/permissions";
+import { requireUser, unitScope, isAdmin, lockHrToLabour} from "@/lib/permissions";
 import { deleteDiscipline } from "@/lib/actions/discipline";
 import { DISCIPLINE_LABELS } from "@/lib/discipline";
 import { formatDateTime } from "@/lib/format";
@@ -14,6 +14,7 @@ export default async function DisciplinePage({
   searchParams: Promise<{ unit?: string }>;
 }) {
   const user = await requireUser();
+  lockHrToLabour(user);
   const { unit: unitFilter } = await searchParams;
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 

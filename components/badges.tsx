@@ -58,11 +58,13 @@ export function RoleBadge({ role }: { role: string }) {
     SUPERADMIN: "bg-purple-100 text-purple-800",
     ADMIN: "bg-blue-100 text-blue-800",
     SUPERVISOR: "bg-teal-100 text-teal-800",
+    HR: "bg-pink-100 text-pink-800",
   };
   const labels: Record<string, string> = {
     SUPERADMIN: "Superadmin",
     ADMIN: "Admin",
     SUPERVISOR: "Supervisor",
+    HR: "HR",
   };
   return <span className={`${base} ${styles[role] ?? ""}`}>{labels[role] ?? role}</span>;
 }

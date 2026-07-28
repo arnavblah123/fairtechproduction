@@ -122,7 +122,9 @@ export async function setBiometricId(formData: FormData) {
 // are likewise shown only to the owner.
 export async function setEmployeeWage(formData: FormData) {
   const user = await requireUser();
-  if (user.role !== "SUPERADMIN") throw new Error("Only the owner can set wages.");
+  if (user.role !== "SUPERADMIN" && user.role !== "HR") {
+    throw new Error("Only the owner or HR can set wages.");
+  }
   const employeeId = String(formData.get("employeeId") ?? "");
   const raw = String(formData.get("hourlyWage") ?? "").trim();
   const hourlyWage = raw === "" ? null : Number(raw);
@@ -132,13 +134,16 @@ export async function setEmployeeWage(formData: FormData) {
   await db.employee.update({ where: { id: employeeId }, data: { hourlyWage } });
   await audit(user.id, "employee.wage", "Employee", employeeId, { hourlyWage });
   revalidatePath("/employees");
+  revalidatePath("/labour");
 }
 
 // ESI/PF monthly lump sum — owner only. Spread as overheads: ÷30 per day
 // the worker logged job time, split over the jobs they were on that day.
 export async function setEmployeeEsiPf(formData: FormData) {
   const user = await requireUser();
-  if (user.role !== "SUPERADMIN") throw new Error("Only the owner can set ESI/PF amounts.");
+  if (user.role !== "SUPERADMIN" && user.role !== "HR") {
+    throw new Error("Only the owner or HR can set ESI/PF amounts.");
+  }
   const employeeId = String(formData.get("employeeId") ?? "");
   const raw = String(formData.get("esiPfMonthly") ?? "").trim();
   const esiPfMonthly = raw === "" ? null : Number(raw);
@@ -148,6 +153,7 @@ export async function setEmployeeEsiPf(formData: FormData) {
   await db.employee.update({ where: { id: employeeId }, data: { esiPfMonthly } });
   await audit(user.id, "employee.esiPf", "Employee", employeeId, { esiPfMonthly });
   revalidatePath("/employees");
+  revalidatePath("/labour");
 }
 
 export async function setEmployeeActive(formData: FormData) {

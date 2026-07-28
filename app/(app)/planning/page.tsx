@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireUser, isAdmin } from "@/lib/permissions";
+import { requireUser, isAdmin, lockHrToLabour} from "@/lib/permissions";
 import {
   createPlan,
   deletePlan,
@@ -23,6 +23,7 @@ const DAY = 86400000;
 
 export default async function PlanningPage() {
   const user = await requireUser();
+  lockHrToLabour(user);
   const owner = user.role === "SUPERADMIN";
   const admin = isAdmin(user);
 

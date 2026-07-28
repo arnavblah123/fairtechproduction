@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireUser, unitScope } from "@/lib/permissions";
+import { requireUser, unitScope, lockHrToLabour} from "@/lib/permissions";
 import { JobStatusBadge, IssueBadge, PriorityBadge } from "@/components/badges";
 import { formatDate, jobCode } from "@/lib/format";
 import type { JobStatus } from "@prisma/client";
@@ -13,6 +13,7 @@ export default async function JobsPage({
   searchParams: Promise<{ status?: string; unit?: string }>;
 }) {
   const user = await requireUser();
+  lockHrToLabour(user);
   const { status, unit } = await searchParams;
 
   const [units, jobs] = await Promise.all([

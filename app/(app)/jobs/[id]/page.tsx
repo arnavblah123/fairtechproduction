@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireUser, canAccessUnit, isAdmin } from "@/lib/permissions";
+import { requireUser, canAccessUnit, isAdmin, lockHrToLabour} from "@/lib/permissions";
 import { setJobStatus, deleteJob, finalDone } from "@/lib/actions/jobs";
 import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework, setShiftPlan, setStageDue } from "@/lib/actions/stages";
 import { shiftPlanLabel } from "@/lib/shift";
@@ -39,6 +39,7 @@ export default async function JobPage({
   searchParams: Promise<{ shift?: string }>;
 }) {
   const user = await requireUser();
+  lockHrToLabour(user);
   const { id } = await params;
   const { shift } = await searchParams;
 

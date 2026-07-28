@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { requireUser } from "@/lib/permissions";
+import { requireUser, lockHrToLabour} from "@/lib/permissions";
 import { JobCreateForm } from "@/components/job-create-form";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +10,7 @@ export default async function NewJobPage({
   searchParams: Promise<{ client?: string; desc?: string; unit?: string }>;
 }) {
   const user = await requireUser();
+  lockHrToLabour(user);
   const { client, desc, unit } = await searchParams;
   const [units, templates, clients, buyers] = await Promise.all([
     db.unit.findMany({

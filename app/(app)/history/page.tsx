@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireUser, unitScope } from "@/lib/permissions";
+import { requireUser, unitScope, lockHrToLabour} from "@/lib/permissions";
 import { formatDate, formatMoney, jobCode } from "@/lib/format";
 import { jobSpanBreakdown, fmtIdle } from "@/lib/idle";
 import { overheadByJob } from "@/lib/overheads";
@@ -41,6 +41,7 @@ export default async function HistoryPage({
   searchParams: Promise<{ unit?: string; template?: string; client?: string }>;
 }) {
   const user = await requireUser();
+  lockHrToLabour(user);
   const { unit: unitFilter, template: templateFilter, client: clientFilter } =
     await searchParams;
 

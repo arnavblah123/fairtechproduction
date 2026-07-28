@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { requireUser, isAdmin } from "@/lib/permissions";
+import { requireUser, isAdmin, lockHrToLabour} from "@/lib/permissions";
 import { simulateAttendanceEvent } from "@/lib/actions/attendance";
 import { formatDateTime } from "@/lib/format";
 
@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AttendancePage() {
   const user = await requireUser();
+  lockHrToLabour(user);
   const [events, employees] = await Promise.all([
     db.attendanceEvent.findMany({ orderBy: { occurredAt: "desc" }, take: 100 }),
     db.employee.findMany({ where: { active: true }, orderBy: { name: "asc" } }),

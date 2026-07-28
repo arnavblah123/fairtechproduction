@@ -14,6 +14,12 @@ export async function requireRole(...roles: Role[]): Promise<SessionUser> {
   return user;
 }
 
+// HR accounts exist only for the Labour page — bounce them there from
+// every production page.
+export function lockHrToLabour(user: SessionUser) {
+  if (user.role === "HR") redirect("/labour");
+}
+
 export function isAdmin(user: SessionUser) {
   return user.role === "ADMIN" || user.role === "SUPERADMIN";
 }

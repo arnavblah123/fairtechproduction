@@ -32,7 +32,8 @@ export async function createUser(
   if (!canManage(actor.role, role)) return { error: "You cannot create users with that role." };
   if (!email || !name || !password) return { error: "Email, name and password are required." };
   if (password.length < 8) return { error: "Password must be at least 8 characters." };
-  if (unitIds.length === 0) return { error: "Assign at least one unit." };
+  // HR accounts see only the Labour page — no unit needed.
+  if (unitIds.length === 0 && role !== "HR") return { error: "Assign at least one unit." };
   if (actor.role === "ADMIN" && unitIds.some((u) => !actor.unitIds.includes(u))) {
     return { error: "You can only assign units you have access to." };
   }
