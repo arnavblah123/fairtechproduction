@@ -1,0 +1,19 @@
+ALTER TABLE "PlanItem" ADD COLUMN "revisedDate" TIMESTAMP(3);
+
+CREATE TABLE "TodoItem" (
+    "id" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "unitId" TEXT,
+    "jobId" TEXT,
+    "createdById" TEXT NOT NULL,
+    "done" BOOLEAN NOT NULL DEFAULT false,
+    "doneBy" TEXT,
+    "doneAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "TodoItem_pkey" PRIMARY KEY ("id")
+);
+
+ALTER TABLE "TodoItem" ADD CONSTRAINT "TodoItem_unitId_fkey" FOREIGN KEY ("unitId") REFERENCES "Unit"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "TodoItem" ADD CONSTRAINT "TodoItem_jobId_fkey" FOREIGN KEY ("jobId") REFERENCES "Job"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "TodoItem" ADD CONSTRAINT "TodoItem_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

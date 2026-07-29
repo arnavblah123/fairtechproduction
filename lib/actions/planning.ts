@@ -115,11 +115,18 @@ export async function setPlanItemLateReason(formData: FormData) {
   if (item.lateReason && !isAdmin(user)) {
     throw new Error("A reason is already recorded — only admins can change it.");
   }
+  const revisedRaw = String(formData.get("revisedDate") ?? "");
+  const revisedDate = revisedRaw ? new Date(revisedRaw) : null;
   await db.planItem.update({
     where: { id: itemId },
-    data: { lateReason: reason, lateReasonBy: user.name, lateReasonAt: new Date() },
+    data: {
+      lateReason: reason,
+      lateReasonBy: user.name,
+      lateReasonAt: new Date(),
+      ...(revisedDate && !isNaN(revisedDate.getTime()) ? { revisedDate } : {}),
+    },
   });
-  await audit(user.id, "plan.lateReason", "PlanItem", itemId, { reason });
+  await audit(user.id, "plan.lateReason", "PlanItem", itemId, { reason, revisedDate: revisedRaw });
   revalidatePath("/planning");
 }
 

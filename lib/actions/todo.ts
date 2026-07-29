@@ -1,0 +1,118 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { db } from "@/lib/db";
+import { audit } from "@/lib/audit";
+import { requireUser, requireRole, isAdmin, assertUnitAccess } from "@/lib/permissions";
+
+// ---------------------------------------------------------------------------
+// The morning To-Do list: owner-added items plus quick-fix actions for the
+// auto-detected reminders (PO number, dispatch date, drawing reuse).
+// ---------------------------------------------------------------------------
+
+export async function addOwnerTodo(formData: FormData) {
+  const user = await requireRole("SUPERADMIN");
+  const message = String(formData.get("message") ?? "").trim();
+  const unitId = String(formData.get("unitId") ?? "") || null;
+  const jobId = String(formData.get("jobId") ?? "") || null;
+  if (!message) return;
+  const item = await db.todoItem.create({
+    data: { message, unitId, jobId, createdById: user.id },
+  });
+  await audit(user.id, "todo.add", "TodoItem", item.id, { message, unitId, jobId });
+  revalidatePath("/todo");
+}
+
+export async function toggleTodoDone(formData: FormData) {
+  const user = await requireUser();
+  const itemId = String(formData.get("itemId") ?? "");
+  const item = await db.todoItem.findUniqueOrThrow({ where: { id: itemId } });
+  if (item.unitId) assertUnitAccess(user, item.unitId);
+  await db.todoItem.update({
+    where: { id: itemId },
+    data: item.done
+      ? { done: false, doneBy: null, doneAt: null }
+      : { done: true, doneBy: user.name, doneAt: new Date() },
+  });
+  await audit(user.id, item.done ? "todo.undo" : "todo.done", "TodoItem", itemId);
+  revalidatePath("/todo");
+}
+
+export async function deleteOwnerTodo(formData: FormData) {
+  const user = await requireRole("SUPERADMIN");
+  const itemId = String(formData.get("itemId") ?? "");
+  await db.todoItem.delete({ where: { id: itemId } });
+  await audit(user.id, "todo.delete", "TodoItem", itemId);
+  revalidatePath("/todo");
+}
+
+// PO number — supervisors fill it when it's missing; admins can correct.
+export async function setJobPoNumber(formData: FormData) {
+  const user = await requireUser();
+  const jobId = String(formData.get("jobId") ?? "");
+  const poNumber = String(formData.get("poNumber") ?? "").trim();
+  if (!poNumber) return;
+  const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
+  assertUnitAccess(user, job.unitId);
+  if (job.poNumber && job.poNumber.trim() && !isAdmin(user)) {
+    throw new Error("PO number is already set — only admins can change it.");
+  }
+  await db.job.update({ where: { id: jobId }, data: { poNumber } });
+  await audit(user.id, "job.poNumber", "Job", jobId, { poNumber });
+  revalidatePath("/todo");
+  revalidatePath(`/jobs/${jobId}`);
+}
+
+// Planned dispatch date, asked in the morning list — write-once for
+// supervisors; admins can change it later.
+export async function setJobEstimatedDispatch(formData: FormData) {
+  const user = await requireUser();
+  const jobId = String(formData.get("jobId") ?? "");
+  const raw = String(formData.get("estimatedDispatch") ?? "");
+  const when = new Date(raw);
+  if (!raw || isNaN(when.getTime())) return;
+  const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
+  assertUnitAccess(user, job.unitId);
+  if (job.estimatedDispatchAt && !isAdmin(user)) {
+    throw new Error("Dispatch date is already set — only admins can change it.");
+  }
+  await db.job.update({ where: { id: jobId }, data: { estimatedDispatchAt: when } });
+  await audit(user.id, "job.estimatedDispatch", "Job", jobId, { estimatedDispatchAt: raw });
+  revalidatePath("/todo");
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/");
+}
+
+// Drawings are usually identical for the same job name — copy them across
+// after the supervisor confirms.
+export async function copyDrawings(formData: FormData) {
+  const user = await requireUser();
+  const fromJobId = String(formData.get("fromJobId") ?? "");
+  const toJobId = String(formData.get("toJobId") ?? "");
+  const [from, to] = await Promise.all([
+    db.job.findUniqueOrThrow({ where: { id: fromJobId } }),
+    db.job.findUniqueOrThrow({ where: { id: toJobId } }),
+  ]);
+  assertUnitAccess(user, to.unitId);
+  const drawings = await db.jobAttachment.findMany({
+    where: { jobId: fromJobId, kind: "DRAWING" },
+  });
+  if (drawings.length === 0) return;
+  await db.jobAttachment.createMany({
+    data: drawings.map((d) => ({
+      jobId: toJobId,
+      kind: d.kind,
+      filename: d.filename,
+      mimeType: d.mimeType,
+      size: d.size,
+      data: d.data,
+      uploadedById: user.id,
+    })),
+  });
+  await audit(user.id, "job.copyDrawings", "Job", toJobId, {
+    fromJobId,
+    files: drawings.map((d) => d.filename),
+  });
+  revalidatePath("/todo");
+  revalidatePath(`/jobs/${toJobId}`);
+}

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireUser, assertUnitAccess } from "@/lib/permissions";
@@ -24,4 +25,6 @@ export async function punchInDay(formData: FormData) {
     date: date.toISOString().slice(0, 10),
   });
   revalidatePath("/");
+  // Straight to the morning list — the day starts with the reminders.
+  redirect("/todo");
 }

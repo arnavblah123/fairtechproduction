@@ -303,6 +303,11 @@ export default async function PlanningPage() {
                           <span className="w-full text-xs text-red-700">
                             📝 {item.lateReason}
                             <span className="text-slate-400"> — {item.lateReasonBy}</span>
+                            {item.revisedDate && !done && (
+                              <span className="font-semibold">
+                                {" "}· now expected {formatDate(item.revisedDate)}
+                              </span>
+                            )}
                           </span>
                         );
                       }
@@ -310,14 +315,21 @@ export default async function PlanningPage() {
                       return (
                         <form
                           action={setPlanItemLateReason}
-                          className="w-full flex gap-1.5 items-center"
+                          className="w-full flex flex-wrap gap-1.5 items-center"
                         >
                           <input type="hidden" name="itemId" value={item.id} />
                           <input
                             name="reason"
                             required
                             placeholder="LATE — state the reason *"
-                            className="flex-1 min-w-0 rounded border border-red-300 bg-white px-2 py-1 text-xs"
+                            className="flex-1 min-w-32 rounded border border-red-300 bg-white px-2 py-1 text-xs"
+                          />
+                          <input
+                            type="date"
+                            name="revisedDate"
+                            required
+                            title="New expected date *"
+                            className="rounded border border-red-300 bg-white px-2 py-1 text-xs"
                           />
                           <button className="rounded bg-red-600 text-white px-2 py-1 text-xs font-medium">
                             Save

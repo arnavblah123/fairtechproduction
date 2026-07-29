@@ -46,6 +46,7 @@ model User {
   plansCreated   Plan[]          @relation("PlanCreatedBy")
   futureJobsAdded FutureJob[]    @relation("FutureJobAddedBy")
   supervisorDays SupervisorDay[]
+  todosCreated   TodoItem[]      @relation("TodoCreatedBy")
 }
 
 // One record per supervisor/admin per day: "I'm working at unit X today."
@@ -89,6 +90,23 @@ model OverheadItem {
   createdAt     DateTime  @default(now())
 }
 
+// Owner-added to-do items for the supervisors' morning list — reminders,
+// dispatch problems, anything. Unit-scoped or general; ticked done by name.
+model TodoItem {
+  id          String    @id @default(cuid())
+  message     String
+  unitId      String?
+  unit        Unit?     @relation(fields: [unitId], references: [id])
+  jobId       String?
+  job         Job?      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User      @relation("TodoCreatedBy", fields: [createdById], references: [id])
+  done        Boolean   @default(false)
+  doneBy      String? // name of who ticked it
+  doneAt      DateTime?
+  createdAt   DateTime  @default(now())
+}
+
 model OverheadItemUnit {
   itemId String
   item   OverheadItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
@@ -128,6 +146,7 @@ model Unit {
   plans        Plan[]
   supervisorDays SupervisorDay[]
   overheadItemUnits OverheadItemUnit[]
+  todoItems    TodoItem[]
 }
 
 model Employee {
@@ -241,6 +260,7 @@ model Job {
   tests       JobTest[]
   planItems   PlanItem[]
   craneLogs   CraneLog[]
+  todoItems   TodoItem[]
 
   @@index([unitId, status])
 }
@@ -479,6 +499,7 @@ model PlanItem {
   lateReason   String?
   lateReasonBy String? // name of who entered it
   lateReasonAt DateTime?
+  revisedDate  DateTime? // the new expected date given with the late reason
   createdAt   DateTime  @default(now())
 
   @@index([planId])

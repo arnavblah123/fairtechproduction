@@ -112,9 +112,24 @@ export default async function JobPage({
   // pause/restart/rework and never counts idle gaps between sessions.
   const allStageLogs = await db.timeLog.findMany({
     where: { jobId: id, stageId: { not: null } },
-    select: { stageId: true, startedAt: true, endedAt: true },
+    select: {
+      stageId: true,
+      startedAt: true,
+      endedAt: true,
+      endSource: true,
+      otBonusMinutes: true,
+      employee: { select: { name: true } },
+    },
+    orderBy: { startedAt: "desc" },
   });
   const stageWorked = workedByStage(allStageLogs);
+  // Per-stage session history for the tap-to-open view on each card.
+  const stageHistory = new Map<string, typeof allStageLogs>();
+  for (const l of allStageLogs) {
+    const arr = stageHistory.get(l.stageId!) ?? [];
+    arr.push(l);
+    stageHistory.set(l.stageId!, arr);
+  }
 
   // Job cost: every logged hour on this job × that worker's hourly wage
   // (set by the owner on the Employees page). Everyone with access to the
@@ -737,10 +752,54 @@ export default async function JobPage({
               }`}
             >
               <div className="flex items-start justify-between gap-2">
-                <p className="font-medium leading-tight">
-                  <span className="text-slate-400 text-sm mr-1">{stage.sequence}.</span>
-                  {stage.name}
-                </p>
+                <details className="flex-1 min-w-0">
+                  <summary className="font-medium leading-tight cursor-pointer select-none list-none">
+                    <span className="text-slate-400 text-sm mr-1">{stage.sequence}.</span>
+                    {stage.name}
+                    <span className="text-slate-300 text-xs ml-1.5" title="Tap for this stage's history">
+                      📜
+                    </span>
+                  </summary>
+                  {/* Stage history: every work session, who, how long */}
+                  <div className="mt-2 rounded-lg bg-white/70 border border-slate-200 p-2 text-xs space-y-1">
+                    {stage.dueAt && <p>📅 Due {formatDate(stage.dueAt)}</p>}
+                    {stage.inspectedBy && (
+                      <p>
+                        ✅ Inspected by {stage.inspectedBy}
+                        {stage.inspectedAt && ` on ${formatDate(stage.inspectedAt)}`}
+                      </p>
+                    )}
+                    {stage.reworks.length > 0 && (
+                      <p className="text-purple-700">
+                        🟣 {stage.reworks.length} rework{stage.reworks.length === 1 ? "" : "s"}
+                      </p>
+                    )}
+                    {(stageHistory.get(stage.id) ?? []).length === 0 && (
+                      <p className="text-slate-400">No work sessions yet.</p>
+                    )}
+                    {(stageHistory.get(stage.id) ?? []).slice(0, 25).map((l, li) => (
+                      <p key={li} className="flex justify-between gap-2">
+                        <span className="truncate">
+                          {l.employee.name}
+                          <span className="text-slate-400">
+                            {" "}
+                            {formatDateTime(l.startedAt)} →{" "}
+                            {l.endedAt ? formatDateTime(l.endedAt) : "running"}
+                          </span>
+                        </span>
+                        <span className="whitespace-nowrap text-slate-600">
+                          {l.endedAt ? formatDuration(l.startedAt, l.endedAt) : (
+                            <LiveDuration since={l.startedAt} />
+                          )}
+                          {l.otBonusMinutes > 0 && (
+                            <span className="text-indigo-700 font-semibold"> +{Math.round(l.otBonusMinutes / 60)}h OT</span>
+                          )}
+                          {l.endSource === "AUTO_SHIFT_END" && " 🌙"}
+                        </span>
+                      </p>
+                    ))}
+                  </div>
+                </details>
                 <StageStatusBadge status={stage.status} />
               </div>
 

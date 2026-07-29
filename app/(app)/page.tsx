@@ -17,6 +17,7 @@ import { closeOverdueShifts, shiftPlanLabel } from "@/lib/shift";
 import { workedByStage, fmtWorked } from "@/lib/idle";
 import { punchInDay } from "@/lib/actions/punch";
 import { istToday } from "@/lib/overheads";
+import { buildTodoData } from "@/lib/todo";
 import type { JobStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +61,9 @@ export default async function DashboardPage({
           include: { unit: { select: { name: true } } },
         });
   const needsPunch = user.role !== "SUPERADMIN" && !todayPunch && units.length > 0;
+
+  // Morning-list badge: how many reminders are pending right now.
+  const todoTotal = (await buildTodoData(user)).total;
 
   const jobs = await db.job.findMany({
     where: {
@@ -161,6 +165,16 @@ export default async function DashboardPage({
             ))}
           </section>
         </div>
+      )}
+
+      {/* Morning reminders banner */}
+      {todoTotal > 0 && (
+        <Link
+          href="/todo"
+          className="block rounded-xl bg-red-600 text-white px-4 py-3 font-semibold shadow-sm hover:bg-red-700"
+        >
+          📋 {todoTotal} reminder{todoTotal === 1 ? "" : "s"} pending — open your To-Do list →
+        </Link>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
