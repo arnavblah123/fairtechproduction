@@ -74,6 +74,10 @@ export default async function PlanningPage() {
   ]);
 
   const now = Date.now();
+  // IST calendar-day strings for the colour coding — immune to how the
+  // timestamp encodes the date.
+  const istDay = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const todayStr = istDay(new Date());
   const isItemDone = (item: (typeof plans)[0]["items"][0]) =>
     item.done ||
     item.stage?.status === "DONE" ||
@@ -210,6 +214,9 @@ export default async function PlanningPage() {
               {formatDate(plan.startDate)} – {formatDate(plan.endDate)}
               {plan.notes && <> · {plan.notes}</>}
             </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              🟠 today&apos;s work · 🟡 coming days · 🔴 late · ✅ done
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <span
@@ -244,7 +251,11 @@ export default async function PlanningPage() {
             <ul className="space-y-1">
               {items.map((item) => {
                 const done = isItemDone(item);
-                const overdue = !done && item.targetDate.getTime() + DAY < now;
+                const tt = item.targetDate.getTime();
+                const overdue = !done && tt + DAY < now;
+                // Colour code: 🟠 today's work · 🟡 coming days · 🔴 late · ✅ done
+                const dueToday = !done && !overdue && istDay(item.targetDate) <= todayStr;
+                const lateDays = overdue ? Math.max(1, Math.floor((now - tt) / DAY)) : 0;
                 return (
                   <li
                     key={item.id}
@@ -253,17 +264,24 @@ export default async function PlanningPage() {
                         ? "bg-green-50 text-green-900"
                         : overdue
                         ? "bg-red-50 text-red-900"
-                        : "bg-slate-50"
+                        : dueToday
+                        ? "bg-orange-100 border border-orange-300 text-orange-950"
+                        : "bg-yellow-50 border border-yellow-200"
                     }`}
                   >
-                    <span>{done ? "✅" : overdue ? "🔴" : "⬜"}</span>
+                    <span>{done ? "✅" : overdue ? "🔴" : dueToday ? "🟠" : "🟡"}</span>
                     <span className={done ? "line-through opacity-70" : ""}>
                       {item.stage ? `${item.stage.sequence}. ` : ""}
                       {item.description}
                     </span>
-                    <span className={`ml-auto text-xs whitespace-nowrap ${overdue ? "font-bold" : "text-slate-500"}`}>
+                    <span
+                      className={`ml-auto text-xs whitespace-nowrap ${
+                        overdue ? "font-bold" : dueToday ? "font-semibold text-orange-800" : "text-slate-500"
+                      }`}
+                    >
                       by {formatDate(item.targetDate)}
-                      {overdue && " — LATE"}
+                      {overdue && ` — LATE by ${lateDays}d`}
+                      {dueToday && " — TODAY"}
                     </span>
                     {/* Late target → the supervisor states the reason */}
                     {(() => {
