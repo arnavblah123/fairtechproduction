@@ -1,0 +1,3 @@
+ALTER TABLE "PlanItem" ADD COLUMN "lateReason" TEXT;
+ALTER TABLE "PlanItem" ADD COLUMN "lateReasonBy" TEXT;
+ALTER TABLE "PlanItem" ADD COLUMN "lateReasonAt" TIMESTAMP(3);

@@ -474,6 +474,11 @@ model PlanItem {
   isDispatch  Boolean   @default(false) // target = the job's dispatch, auto-done when dispatched
   done        Boolean   @default(false)
   doneAt      DateTime? // when manually ticked; stage/dispatch items use real completion times
+  // When a target runs late, the supervisor states why. Write-once for
+  // supervisors; admins/owner can correct it.
+  lateReason   String?
+  lateReasonBy String? // name of who entered it
+  lateReasonAt DateTime?
   createdAt   DateTime  @default(now())
 
   @@index([planId])

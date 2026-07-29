@@ -6,6 +6,7 @@ import {
   deletePlan,
   deletePlanItem,
   togglePlanItemDone,
+  setPlanItemLateReason,
   addFutureJob,
   deleteFutureJob,
 } from "@/lib/actions/planning";
@@ -264,6 +265,41 @@ export default async function PlanningPage() {
                       by {formatDate(item.targetDate)}
                       {overdue && " — LATE"}
                     </span>
+                    {/* Late target → the supervisor states the reason */}
+                    {(() => {
+                      const actual = actualDoneAt(item);
+                      const finishedLate =
+                        done && actual
+                          ? Math.round((actual.getTime() - item.targetDate.getTime()) / DAY) > 0
+                          : false;
+                      const isLate = overdue || finishedLate;
+                      if (item.lateReason) {
+                        return (
+                          <span className="w-full text-xs text-red-700">
+                            📝 {item.lateReason}
+                            <span className="text-slate-400"> — {item.lateReasonBy}</span>
+                          </span>
+                        );
+                      }
+                      if (!isLate) return null;
+                      return (
+                        <form
+                          action={setPlanItemLateReason}
+                          className="w-full flex gap-1.5 items-center"
+                        >
+                          <input type="hidden" name="itemId" value={item.id} />
+                          <input
+                            name="reason"
+                            required
+                            placeholder="LATE — state the reason *"
+                            className="flex-1 min-w-0 rounded border border-red-300 bg-white px-2 py-1 text-xs"
+                          />
+                          <button className="rounded bg-red-600 text-white px-2 py-1 text-xs font-medium">
+                            Save
+                          </button>
+                        </form>
+                      );
+                    })()}
                     {/* Estimated vs actual: once done, show the difference */}
                     {done && actualDoneAt(item) && (() => {
                       const actual = actualDoneAt(item)!;

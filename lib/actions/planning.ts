@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { requireUser, requireRole, isAdmin } from "@/lib/permissions";
+import { requireUser, requireRole, isAdmin, assertUnitAccess } from "@/lib/permissions";
 
 // ---------------------------------------------------------------------------
 // Production planning (any date range). Plans and targets are superadmin-only to
@@ -97,6 +97,29 @@ export async function togglePlanItemDone(formData: FormData) {
     data: { done: !item.done, doneAt: item.done ? null : new Date() },
   });
   await audit(user.id, "plan.itemToggle", "PlanItem", itemId, { done: !item.done });
+  revalidatePath("/planning");
+}
+
+// A late target needs an explanation — supervisors state why. Write-once
+// for supervisors; admins/owner can correct it later.
+export async function setPlanItemLateReason(formData: FormData) {
+  const user = await requireUser();
+  const itemId = String(formData.get("itemId") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return;
+  const item = await db.planItem.findUniqueOrThrow({
+    where: { id: itemId },
+    include: { plan: { select: { unitId: true } } },
+  });
+  if (item.plan.unitId) assertUnitAccess(user, item.plan.unitId);
+  if (item.lateReason && !isAdmin(user)) {
+    throw new Error("A reason is already recorded — only admins can change it.");
+  }
+  await db.planItem.update({
+    where: { id: itemId },
+    data: { lateReason: reason, lateReasonBy: user.name, lateReasonAt: new Date() },
+  });
+  await audit(user.id, "plan.lateReason", "PlanItem", itemId, { reason });
   revalidatePath("/planning");
 }
 
