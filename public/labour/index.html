@@ -11,6 +11,24 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Injected by the production host, in plain ES5 on purpose: if the
+         app hasn't mounted after a few seconds (old browser that can't run
+         the modern bundle), explain instead of showing a blank page. -->
+    <script>
+      setTimeout(function () {
+        var root = document.getElementById('root');
+        if (root && root.childNodes.length === 0) {
+          var d = document.createElement('div');
+          d.setAttribute('style', 'padding:32px 20px;font-family:Arial,Helvetica,sans-serif;color:#0f172a;text-align:center;');
+          d.innerHTML =
+            '<h2 style="margin:0 0 10px">⚠️ App could not load</h2>' +
+            '<p style="margin:0 0 6px">This phone&#39;s browser is too old for the Labour app.</p>' +
+            '<p style="margin:0 0 14px"><b>Fix: open <span style="color:#15803d">Play Store</span> &#8594; install/update <span style="color:#15803d">Google Chrome</span> &#8594; open this same link in Chrome.</b></p>' +
+            '<p style="margin:0"><a href="/" style="color:#1d4ed8">&#8592; Back to Production app</a></p>';
+          root.appendChild(d);
+        }
+      }, 4000);
+    </script>
     <!-- Injected by the production app host: session logout (the embedded
          copy signs in via the production login, so it needs a way out). -->
     <a href="/api/logout"
