@@ -58,6 +58,7 @@ export async function buildTodoData(user: SessionUser) {
           description: true,
           clientName: true,
           poNumber: true,
+          poValue: true,
           attachments: { where: { kind: "DRAWING" }, select: { id: true }, take: 1 },
         },
         orderBy: { jobNumber: "asc" },
@@ -87,7 +88,9 @@ export async function buildTodoData(user: SessionUser) {
     ]);
 
   const missingDrawings = activeJobs.filter((j) => j.attachments.length === 0);
-  const missingPo = activeJobs.filter((j) => !j.poNumber || !j.poNumber.trim());
+  const missingPo = activeJobs.filter(
+    (j) => !j.poNumber || !j.poNumber.trim() || !j.poValue
+  );
 
   // Reuse suggestion: an earlier job with the same name that has drawings.
   const copySources =

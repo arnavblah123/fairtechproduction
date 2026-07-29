@@ -495,6 +495,7 @@ export default async function DashboardPage({
                               min={1}
                               step="0.01"
                               required
+                              defaultValue={job.poValue ?? ""}
                               placeholder="PO value without GST ₹ *"
                               className="flex-1 min-w-0 rounded-lg border border-green-300 px-2 py-1.5 text-xs"
                               title="The job's PO value excluding GST — required to dispatch"

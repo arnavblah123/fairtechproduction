@@ -46,19 +46,22 @@ export async function deleteOwnerTodo(formData: FormData) {
   revalidatePath("/todo");
 }
 
-// PO number — supervisors fill it when it's missing; admins can correct.
+// PO number + PO value (without GST) — supervisors fill them when missing;
+// admins can correct.
 export async function setJobPoNumber(formData: FormData) {
   const user = await requireUser();
   const jobId = String(formData.get("jobId") ?? "");
   const poNumber = String(formData.get("poNumber") ?? "").trim();
-  if (!poNumber) return;
+  const poValue = Number(String(formData.get("poValue") ?? "").trim());
+  if (!poNumber || isNaN(poValue) || poValue <= 0) return;
   const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
   assertUnitAccess(user, job.unitId);
-  if (job.poNumber && job.poNumber.trim() && !isAdmin(user)) {
-    throw new Error("PO number is already set — only admins can change it.");
+  const alreadySet = Boolean(job.poNumber && job.poNumber.trim() && job.poValue);
+  if (alreadySet && !isAdmin(user)) {
+    throw new Error("PO details are already set — only admins can change them.");
   }
-  await db.job.update({ where: { id: jobId }, data: { poNumber } });
-  await audit(user.id, "job.poNumber", "Job", jobId, { poNumber });
+  await db.job.update({ where: { id: jobId }, data: { poNumber, poValue } });
+  await audit(user.id, "job.poNumber", "Job", jobId, { poNumber, poValue });
   revalidatePath("/todo");
   revalidatePath(`/jobs/${jobId}`);
 }

@@ -247,7 +247,7 @@ export default async function TodoPage() {
         })}
       </Section>
 
-      <Section title="🧾 PO number missing — add it" count={data.missingPo.length}>
+      <Section title="🧾 PO details missing — add number and value" count={data.missingPo.length}>
         {data.missingPo.map((j) => (
           <form
             key={j.id}
@@ -261,7 +261,18 @@ export default async function TodoPage() {
             <input
               name="poNumber"
               required
+              defaultValue={j.poNumber ?? ""}
               placeholder="PO number *"
+              className="w-28 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+            />
+            <input
+              name="poValue"
+              type="number"
+              min={1}
+              step="0.01"
+              required
+              defaultValue={j.poValue ?? ""}
+              placeholder="PO value (no GST) ₹ *"
               className="w-32 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
             />
             <button className="rounded bg-slate-900 text-white px-2 py-1 text-xs font-medium">Save</button>
