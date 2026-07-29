@@ -215,7 +215,7 @@ export default async function PlanningPage() {
               {plan.notes && <> · {plan.notes}</>}
             </p>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              🟠 today&apos;s work · 🟡 coming days · 🔴 late · ✅ done
+              🟠 today&apos;s work · 🟡 next 2 days · 🔴 late · ✅ done
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -253,8 +253,13 @@ export default async function PlanningPage() {
                 const done = isItemDone(item);
                 const tt = item.targetDate.getTime();
                 const overdue = !done && tt + DAY < now;
-                // Colour code: 🟠 today's work · 🟡 coming days · 🔴 late · ✅ done
-                const dueToday = !done && !overdue && istDay(item.targetDate) <= todayStr;
+                // Colour code: 🟠 today · 🟡 next 2 days · 🔴 late · ✅ done
+                const targetDay = istDay(item.targetDate);
+                const dueToday = !done && !overdue && targetDay <= todayStr;
+                const daysAhead = Math.round(
+                  (new Date(targetDay).getTime() - new Date(todayStr).getTime()) / DAY
+                );
+                const dueSoon = !done && !overdue && !dueToday && daysAhead <= 2;
                 const lateDays = overdue ? Math.max(1, Math.floor((now - tt) / DAY)) : 0;
                 return (
                   <li
@@ -266,10 +271,12 @@ export default async function PlanningPage() {
                         ? "bg-red-50 text-red-900"
                         : dueToday
                         ? "bg-orange-100 border border-orange-300 text-orange-950"
-                        : "bg-yellow-50 border border-yellow-200"
+                        : dueSoon
+                        ? "bg-yellow-50 border border-yellow-200"
+                        : "bg-slate-50"
                     }`}
                   >
-                    <span>{done ? "✅" : overdue ? "🔴" : dueToday ? "🟠" : "🟡"}</span>
+                    <span>{done ? "✅" : overdue ? "🔴" : dueToday ? "🟠" : dueSoon ? "🟡" : "⬜"}</span>
                     <span className={done ? "line-through opacity-70" : ""}>
                       {item.stage ? `${item.stage.sequence}. ` : ""}
                       {item.description}
