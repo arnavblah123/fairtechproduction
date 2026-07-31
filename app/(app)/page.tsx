@@ -18,6 +18,8 @@ import { workedByStage, fmtWorked } from "@/lib/idle";
 import { punchInDay } from "@/lib/actions/punch";
 import { istToday } from "@/lib/overheads";
 import { buildTodoData } from "@/lib/todo";
+import { buildOffList } from "@/lib/attendance-off";
+import { toggleLeaveToday } from "@/lib/actions/employees";
 import type { JobStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +66,9 @@ export default async function DashboardPage({
 
   // Morning-list badge: how many reminders are pending right now.
   const todoTotal = (await buildTodoData(user)).total;
+
+  // Off today: present yesterday, nothing today, no leave tick.
+  const { offByUnit, onLeaveByUnit } = await buildOffList(units.map((u) => u.id));
 
   const jobs = await db.job.findMany({
     where: {
@@ -275,6 +280,53 @@ export default async function DashboardPage({
                     {allUnitJobs.length} job{allUnitJobs.length === 1 ? "" : "s"}
                   </span>
                 </header>
+                {/* Off today: were present yesterday, missing today */}
+                {(offByUnit.get(unit.id)?.length || onLeaveByUnit.get(unit.id)?.length) ? (
+                  <div className="border-b-2 border-red-100 bg-red-50/60 px-4 py-2.5 space-y-1">
+                    {(offByUnit.get(unit.id) ?? []).length > 0 && (
+                      <p className="text-xs font-semibold uppercase tracking-wide text-red-700">
+                        🏠 Off today — were present yesterday
+                      </p>
+                    )}
+                    {(offByUnit.get(unit.id) ?? []).map((e) => (
+                      <div
+                        key={e.id}
+                        className="flex items-center justify-between gap-2 text-sm bg-white rounded px-2 py-1"
+                      >
+                        <span>
+                          {e.name} <span className="text-xs text-slate-400">({e.skill})</span>
+                        </span>
+                        <form action={toggleLeaveToday}>
+                          <input type="hidden" name="employeeId" value={e.id} />
+                          <button
+                            className="rounded bg-teal-600 text-white px-2 py-0.5 text-xs"
+                            title="Absence is known (leave/holiday/informed) — removes from this list for today"
+                          >
+                            On leave ✓
+                          </button>
+                        </form>
+                      </div>
+                    ))}
+                    {(onLeaveByUnit.get(unit.id) ?? []).length > 0 && (
+                      <p className="text-xs text-teal-700">
+                        🏖 On leave today:{" "}
+                        {(onLeaveByUnit.get(unit.id) ?? []).map((e, i) => (
+                          <span key={e.id}>
+                            {i > 0 && ", "}
+                            {e.name}
+                            <form action={toggleLeaveToday} className="inline ml-0.5">
+                              <input type="hidden" name="employeeId" value={e.id} />
+                              <button className="text-[10px] text-slate-400 hover:text-red-600" title="Undo">
+                                ✕
+                              </button>
+                            </form>
+                          </span>
+                        ))}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+
                 <div className="divide-y divide-slate-100">
                   {unitJobs.length === 0 && (
                     <p className="px-4 py-6 text-sm text-slate-400 text-center">

@@ -150,6 +150,28 @@ export async function setEmployeeEsiPf(formData: FormData) {
   revalidatePath("/employees");
 }
 
+// Tick / untick "on leave today" for a worker on the daily off-list.
+export async function toggleLeaveToday(formData: FormData) {
+  const user = await requireUser();
+  const employeeId = String(formData.get("employeeId") ?? "");
+  const employee = await db.employee.findUniqueOrThrow({ where: { id: employeeId } });
+  assertUnitAccess(user, employee.primaryUnitId);
+  const { istToday } = await import("@/lib/overheads");
+  const date = istToday();
+  const existing = await db.leaveDay.findUnique({
+    where: { employeeId_date: { employeeId, date } },
+  });
+  if (existing) {
+    await db.leaveDay.delete({ where: { id: existing.id } });
+  } else {
+    await db.leaveDay.create({ data: { employeeId, date, markedBy: user.name } });
+  }
+  await audit(user.id, existing ? "employee.leaveUndo" : "employee.leave", "Employee", employeeId, {
+    date: date.toISOString().slice(0, 10),
+  });
+  revalidatePath("/");
+}
+
 export async function setEmployeeActive(formData: FormData) {
   const user = await requireUser();
   if (!isAdmin(user)) throw new Error("Not allowed");

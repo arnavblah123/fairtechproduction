@@ -167,6 +167,21 @@ model Employee {
   transfers   UnitTransfer[]
   timeLogs    TimeLog[]
   disciplines Discipline[]
+  leaveDays   LeaveDay[]
+}
+
+// "On leave today" acknowledgment — ticked by a supervisor/owner when a
+// worker's absence is known (leave, holiday, informed). Hides the worker
+// from the daily off-list.
+model LeaveDay {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date       DateTime @db.Date // IST calendar date
+  markedBy   String // name of who ticked it
+  createdAt  DateTime @default(now())
+
+  @@unique([employeeId, date])
 }
 
 // Log of unit membership over time. The open row (toDate = null) is the current unit.
