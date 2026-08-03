@@ -603,3 +603,27 @@ model Setting {
   key   String @id
   value String
 }
+
+// ---------- Labour calling app ----------
+
+// Activity events pushed from the labour calling app (each phone keeps an
+// outbox and syncs when online). clientId makes pushes idempotent.
+model LabourActivity {
+  id          String   @id @default(cuid())
+  clientId    String   @unique
+  subjectId   String
+  subjectName String
+  action      String
+  notes       String?
+  occurredAt  DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([occurredAt])
+}
+
+// Latest pipeline counts snapshot from the labour app (single row, id "latest").
+model LabourSnapshot {
+  id        String   @id
+  data      Json
+  updatedAt DateTime @updatedAt
+}
