@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db as prisma } from "@/lib/db";
+import { jobCode } from "@/lib/format";
 
 // Read-only export for the Fairtech Store (consumables inventory) system.
 // The inventory app polls this to mirror jobs and pull per-job labour hours,
@@ -85,6 +86,9 @@ export async function GET(req: NextRequest) {
       })),
     jobs: jobs.map((j) => ({
       jobNumber: j.jobNumber,
+      // Canonical job code as shown everywhere in production (JOB-0020) — the
+      // Store app uses this verbatim so both apps call a job the same thing.
+      code: jobCode(j.jobNumber),
       clientName: j.clientName,
       description: j.description,
       poNumber: j.poNumber,
