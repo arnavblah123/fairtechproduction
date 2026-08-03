@@ -34,6 +34,20 @@ async function unauthorized(req: NextRequest) {
   );
 }
 
+// Name of the logged-in user pushing this batch, so reports can show who
+// did the calling. Null for key-authenticated callers.
+async function actorName(req: NextRequest): Promise<string | null> {
+  const token = req.cookies.get(COOKIE_NAME)?.value;
+  if (!token) return null;
+  const payload = await verifySessionToken(token);
+  if (!payload) return null;
+  const user = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    select: { name: true },
+  });
+  return user?.name ?? null;
+}
+
 export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
 }
@@ -58,6 +72,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders(req) });
   }
 
+  const actor = await actorName(req);
   const rows = (body.activities || [])
     .filter((a) => a && a.id && a.action)
     .slice(0, 500)
@@ -65,6 +80,7 @@ export async function POST(req: NextRequest) {
       clientId: String(a.id),
       subjectId: String(a.subjectId || ""),
       subjectName: String(a.subjectName || ""),
+      actorName: actor,
       action: String(a.action),
       notes: a.notes ? String(a.notes) : null,
       occurredAt: a.timestamp ? new Date(a.timestamp) : new Date(),

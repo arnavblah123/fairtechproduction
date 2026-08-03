@@ -613,6 +613,9 @@ model LabourActivity {
   clientId    String   @unique
   subjectId   String
   subjectName String
+  // Who did it — the logged-in production user whose session pushed this
+  // batch (null for key-authenticated external callers).
+  actorName   String?
   action      String
   notes       String?
   occurredAt  DateTime

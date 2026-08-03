@@ -53,6 +53,17 @@ export async function GET(req: NextRequest) {
   const savedNames = activities.filter((a) => a.action === "saved_contact").map((a) => a.subjectName);
   const hiredNames = activities.filter((a) => a.action === "hired").map((a) => a.subjectName);
 
+  // Who did the work today (multiple people may be calling from their own logins).
+  const perPerson: Record<string, { calls: number; entered: number; msgs: number }> = {};
+  const OUTCOME_SET = new Set(Object.keys(OUTCOME_LABELS));
+  for (const a of activities) {
+    const who = a.actorName || "Unknown device";
+    const b = (perPerson[who] = perPerson[who] || { calls: 0, entered: 0, msgs: 0 });
+    if (CALL_ACTIONS.has(a.action)) b.calls++;
+    if (OUTCOME_SET.has(a.action)) b.entered++;
+    if (a.action === "whatsapp_sent") b.msgs++;
+  }
+
   const snap = (snapshotRow?.data ?? {}) as Record<string, number | string>;
   const snapTime = snapshotRow?.updatedAt
     ? new Date(snapshotRow.updatedAt.getTime() + IST_MS).toISOString().slice(0, 16).replace("T", " ")
@@ -66,6 +77,7 @@ export async function GET(req: NextRequest) {
     outcomes,
     savedNames,
     hiredNames,
+    perPerson,
     pipeline: snap,
     pipelineAsOf: snapTime,
   };
@@ -98,6 +110,21 @@ export async function GET(req: NextRequest) {
       </table>
       ${savedNames.length ? `<p><b>Saved today:</b> ${savedNames.join(", ")}</p>` : ""}
       ${hiredNames.length ? `<p><b>Hired today:</b> ${hiredNames.join(", ")}</p>` : ""}
+      ${
+        Object.keys(perPerson).length > 1 || (Object.keys(perPerson).length === 1 && !perPerson["Unknown device"])
+          ? `<h3 style="margin:16px 0 4px">Who did the work</h3>
+             <table style="border-collapse:collapse">
+               <tr><td style="padding:4px 12px 4px 0;color:#555">Person</td><td style="padding:4px 12px 4px 0;color:#555">Calls</td><td style="padding:4px 12px 4px 0;color:#555">Entered</td><td style="padding:4px 0;color:#555">Msgs</td></tr>
+               ${Object.entries(perPerson)
+                 .sort((a, b) => b[1].calls - a[1].calls)
+                 .map(
+                   ([who, b]) =>
+                     `<tr><td style="padding:4px 12px 4px 0"><b>${who}</b></td><td style="padding:4px 12px 4px 0">${b.calls}</td><td style="padding:4px 12px 4px 0">${b.entered}</td><td style="padding:4px 0">${b.msgs}</td></tr>`
+                 )
+                 .join("")}
+             </table>`
+          : ""
+      }
       <h3 style="margin:16px 0 4px">Pipeline stages${snapTime ? ` <span style="font-weight:normal;color:#777;font-size:13px">(as of ${snapTime} IST)</span>` : ""}</h3>
       <table style="border-collapse:collapse">${pipelineRows}</table>
       ${activities.length === 0 ? '<p style="color:#b45309"><b>No calling activity was recorded today.</b></p>' : ""}
