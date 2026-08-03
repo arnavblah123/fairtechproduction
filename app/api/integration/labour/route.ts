@@ -67,8 +67,8 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  // "Present today" = punched LOGIN today (IST) or has a time log that
-  // started today / is still open.
+  // "Present today" = punched LOGIN today (IST) or has a time log touching
+  // today — started today, still open, or a night shift that ran into today.
   const IST_MS = 5.5 * 3600 * 1000;
   const istNow = new Date(Date.now() + IST_MS);
   const istMidnightUtc = new Date(
@@ -80,7 +80,13 @@ export async function GET(req: NextRequest) {
       select: { employeeCode: true },
     }),
     prisma.timeLog.findMany({
-      where: { OR: [{ startedAt: { gte: istMidnightUtc } }, { endedAt: null }] },
+      where: {
+        OR: [
+          { startedAt: { gte: istMidnightUtc } },
+          { endedAt: null },
+          { endedAt: { gte: istMidnightUtc } },
+        ],
+      },
       select: { employee: { select: { code: true } } },
     }),
   ]);

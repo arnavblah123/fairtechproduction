@@ -694,10 +694,19 @@ async function KpiReport({
   const consumableShare = totalCost > 0 ? Math.round((consumablesCost / totalCost) * 100) : null;
   // Hours & utilisation
   const manMinutes = logs.reduce((sum, l) => sum + overlapMinutes(l.startedAt, l.endedAt, winStart, winEnd, now), 0);
+  // Worker-days: a shift crossing midnight counts on both days it touches.
   const presentDays = new Set(
     logs.flatMap((l) => {
-      const m = overlapMinutes(l.startedAt, l.endedAt, winStart, winEnd, now);
-      return m > 0 ? [`${l.employeeId}|${istDayStr(l.startedAt)}`] : [];
+      const keys: string[] = [];
+      const end = l.endedAt ?? now;
+      for (
+        let t = Math.max(l.startedAt.getTime(), winStart.getTime());
+        t < Math.min(end.getTime(), winEnd.getTime());
+        t = dayStart(istDayStr(new Date(t))).getTime() + DAY
+      ) {
+        keys.push(`${l.employeeId}|${istDayStr(new Date(t))}`);
+      }
+      return keys;
     })
   ).size;
   const utilisation = presentDays > 0 ? Math.round((manMinutes / 60 / (presentDays * 8)) * 100) : null;
