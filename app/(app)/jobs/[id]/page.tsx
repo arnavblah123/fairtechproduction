@@ -5,6 +5,7 @@ import { requireUser, canAccessUnit, isAdmin, lockHrToLabour} from "@/lib/permis
 import { setJobStatus, deleteJob, finalDone } from "@/lib/actions/jobs";
 import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework, setShiftPlan, setStageDue } from "@/lib/actions/stages";
 import { shiftPlanLabel } from "@/lib/shift";
+import { heldItems } from "@/lib/inventory";
 import { raiseIssue, resolveIssue } from "@/lib/actions/issues";
 import { addJobTest, deleteJobTest } from "@/lib/actions/tests";
 import {
@@ -232,6 +233,9 @@ export default async function JobPage({
           : `${j.description} · ${jobCode(j.jobNumber)} ${j.clientName}`,
       stages: j.stages.map((s) => ({ id: s.id, label: `${s.sequence}. ${s.name}` })),
     }));
+  // Consumables these people are still holding, straight from the store app.
+  const held = await heldItems(shiftEmployees.map((e) => e.code));
+  const heldByCode = new Map(held.map((h) => [h.employeeCode, h]));
 
   // Live idle indicator: in progress but nobody clocked on right now.
   const openLogCount = job.stages.reduce((n, s) => n + s.timeLogs.length, 0);
@@ -268,6 +272,7 @@ export default async function JobPage({
                 jobs={shiftJobOptions}
                 currentJobId={job.id}
                 remaining={shiftIds.filter((x) => x !== emp.id).join(",")}
+                held={heldByCode.get(emp.code)?.items ?? []}
               />
             ))}
           </div>
