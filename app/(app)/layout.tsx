@@ -34,6 +34,7 @@ export default async function AppLayout({
         { href: "/discipline", label: "Discipline" },
         { href: "/attendance", label: "Attendance" },
         ...(isAdmin ? [{ href: "/users", label: "Users" }] : []),
+        ...(user.role === "SUPERADMIN" ? [{ href: "/reports", label: "Reports" }] : []),
         ...(user.role === "SUPERADMIN" ? [{ href: "/planner", label: "Scorecard" }] : []),
         ...(user.role === "SUPERADMIN" ? [{ href: "/overheads", label: "Overheads" }] : []),
         ...(user.role === "SUPERADMIN" ? [{ href: "/audit", label: "Audit" }] : []),
