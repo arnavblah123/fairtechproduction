@@ -4,6 +4,7 @@ import { requireUser, unitScope, lockHrToLabour} from "@/lib/permissions";
 import { formatDate, formatMoney, jobCode } from "@/lib/format";
 import { jobSpanBreakdown, fmtIdle } from "@/lib/idle";
 import { overheadByJob } from "@/lib/overheads";
+import { getConsumableCosts } from "@/lib/consumables";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ type HistoryRow = {
   daysLate: number; // negative = finished early
   labourCost: number | null; // owner only — hours × each worker's hourly wage
   overheads: number | null; // owner only — supervisor salary share of this job's days
+  consumables: number | null; // owner only — Store app consumable cost for this job
 };
 
 function fmtManHours(minutes: number): string {
@@ -79,8 +81,10 @@ export default async function HistoryPage({
     }),
   ]);
 
-  const overheadMap =
-    user.role === "SUPERADMIN" ? await overheadByJob(jobs.map((j) => j.id)) : null;
+  const [overheadMap, consumableMap] =
+    user.role === "SUPERADMIN"
+      ? await Promise.all([overheadByJob(jobs.map((j) => j.id)), getConsumableCosts()])
+      : [null, null];
 
   const rows: HistoryRow[] = jobs.map((job) => {
     const completedAt = job.completedAt!;
@@ -91,10 +95,7 @@ export default async function HistoryPage({
       : null;
     const manMinutes = job.timeLogs.reduce((sum, l) => {
       const end = l.endedAt ?? completedAt;
-      // otBonusMinutes = the +4h full-night OT credit
-      return (
-        sum + Math.max(0, end.getTime() - l.startedAt.getTime()) / 60000 + l.otBonusMinutes
-      );
+      return sum + Math.max(0, end.getTime() - l.startedAt.getTime()) / 60000;
     }, 0);
     const breakdown = jobSpanBreakdown(job.timeLogs, completedAt);
     const labourCost =
@@ -102,9 +103,7 @@ export default async function HistoryPage({
         ? job.timeLogs.reduce((sum, l) => {
             if (l.employee.hourlyWage === null) return sum;
             const end = l.endedAt ?? completedAt;
-            const hours =
-              Math.max(0, end.getTime() - l.startedAt.getTime()) / 3600000 +
-              l.otBonusMinutes / 60;
+            const hours = Math.max(0, end.getTime() - l.startedAt.getTime()) / 3600000;
             return sum + hours * l.employee.hourlyWage;
           }, 0)
         : null;
@@ -127,6 +126,9 @@ export default async function HistoryPage({
       daysLate,
       labourCost,
       overheads: overheadMap ? overheadMap.get(job.id) ?? 0 : null,
+      consumables: consumableMap
+        ? consumableMap.get(job.jobNumber)?.trueCost ?? 0
+        : null,
     };
   });
 
@@ -221,6 +223,7 @@ export default async function HistoryPage({
               <th className="px-4 py-3">Man-hours</th>
               {user.role === "SUPERADMIN" && <th className="px-4 py-3">Labour ₹</th>}
               {user.role === "SUPERADMIN" && <th className="px-4 py-3">Overheads ₹</th>}
+              {user.role === "SUPERADMIN" && <th className="px-4 py-3">Consumables ₹</th>}
               <th className="px-4 py-3">Idle</th>
               <th className="px-4 py-3">Vs plan</th>
             </tr>
@@ -256,6 +259,13 @@ export default async function HistoryPage({
                       : "—"}
                   </td>
                 )}
+                {user.role === "SUPERADMIN" && (
+                  <td className="px-4 py-3 whitespace-nowrap font-medium text-emerald-800">
+                    {r.consumables !== null && r.consumables > 0
+                      ? formatMoney(r.consumables)
+                      : "—"}
+                  </td>
+                )}
                 <td className="px-4 py-3 whitespace-nowrap">
                   {r.idleMinutes === null ? (
                     "—"
@@ -284,7 +294,7 @@ export default async function HistoryPage({
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={12} className="px-4 py-10 text-center text-slate-400">
                   No completed jobs yet. Once jobs are marked completed, they appear
                   here with their timings for comparison.
                 </td>

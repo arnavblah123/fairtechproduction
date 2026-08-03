@@ -5,6 +5,8 @@ import { formatDate, formatMoney, jobCode } from "@/lib/format";
 import { workedByStage, fmtWorked, unionMinutes } from "@/lib/idle";
 import { overheadByJob } from "@/lib/overheads";
 import { PrintButton } from "@/components/print-button";
+import { otOverlapMinutes } from "@/lib/ot";
+import { getConsumableCosts } from "@/lib/consumables";
 
 export const dynamic = "force-dynamic";
 
@@ -163,13 +165,19 @@ async function DailyLabour({
   const rows = new Map<string, Row>();
   for (const l of logs) {
     const m = overlapMinutes(l.startedAt, l.endedAt, s, e, now);
-    if (m <= 0 && l.otBonusMinutes === 0) continue;
+    if (m <= 0) continue;
     const row =
       rows.get(l.employee.id) ??
       ({ name: l.employee.name, unitId: l.employee.primaryUnitId, jobMin: 0, dutyMin: 0, otMin: 0, wage: l.employee.hourlyWage, jobs: new Set() } as Row);
     if (l.activity === "STAGE" || l.jobId) row.jobMin += m;
     else row.dutyMin += m;
-    if (l.endedAt && l.endedAt > s && l.endedAt <= e) row.otMin += l.otBonusMinutes;
+    // OT = worked time after 10 PM of this day (till 6 AM next morning)
+    row.otMin += otOverlapMinutes(
+      l.startedAt,
+      l.endedAt ?? now,
+      new Date(s.getTime() + 22 * 3600e3),
+      new Date(s.getTime() + 32 * 3600e3)
+    );
     if (l.job) row.jobs.add(`${l.job.description}`);
     rows.set(l.employee.id, row);
   }
@@ -182,10 +190,10 @@ async function DailyLabour({
     rosterByUnit.set(emp.primaryUnitId, (rosterByUnit.get(emp.primaryUnitId) ?? 0) + 1);
   }
   const totalCost = [...rows.values()].reduce(
-    (sum, row) => sum + (row.wage ?? 0) * ((row.jobMin + row.dutyMin + row.otMin) / 60),
+    (sum, row) => sum + (row.wage ?? 0) * ((row.jobMin + row.dutyMin) / 60),
     0
   );
-  const totalMin = [...rows.values()].reduce((sum, row) => sum + row.jobMin + row.dutyMin + row.otMin, 0);
+  const totalMin = [...rows.values()].reduce((sum, row) => sum + row.jobMin + row.dutyMin, 0);
 
   return (
     <div className="space-y-4">
@@ -223,10 +231,10 @@ async function DailyLabour({
                       <td className="px-2 py-1.5 whitespace-nowrap">{row.name}</td>
                       <td className="px-2 py-1.5">{(row.jobMin / 60).toFixed(1)}</td>
                       <td className="px-2 py-1.5">{(row.dutyMin / 60).toFixed(1)}</td>
-                      <td className="px-2 py-1.5">{row.otMin > 0 ? `+${(row.otMin / 60).toFixed(0)}h` : "—"}</td>
+                      <td className="px-2 py-1.5">{row.otMin > 0 ? `${(row.otMin / 60).toFixed(1)}h` : "—"}</td>
                       <td className="px-2 py-1.5 whitespace-nowrap">
                         {row.wage !== null
-                          ? formatMoney(row.wage * ((row.jobMin + row.dutyMin + row.otMin) / 60))
+                          ? formatMoney(row.wage * ((row.jobMin + row.dutyMin) / 60))
                           : "—"}
                       </td>
                       <td className="px-2 py-1.5 text-xs text-slate-500">{[...row.jobs].join(", ")}</td>
@@ -311,19 +319,24 @@ async function Production({
       }),
     ]);
 
-  const overheadMap = await overheadByJob(dispatched.map((j) => j.id));
+  const [overheadMap, consumableMap] = await Promise.all([
+    overheadByJob(dispatched.map((j) => j.id)),
+    getConsumableCosts(),
+  ]);
   const dispatchRows = dispatched.map((j) => {
     const labour = j.timeLogs.reduce((sum, l) => {
       if (l.employee.hourlyWage === null) return sum;
-      const hours =
-        Math.max(0, ((l.endedAt ?? j.completedAt!).getTime() - l.startedAt.getTime()) / 3600000) +
-        l.otBonusMinutes / 60;
+      const hours = Math.max(
+        0,
+        ((l.endedAt ?? j.completedAt!).getTime() - l.startedAt.getTime()) / 3600000
+      );
       return sum + hours * l.employee.hourlyWage;
     }, 0);
-    const cost = labour + (overheadMap.get(j.id) ?? 0);
+    const consumables = consumableMap.get(j.jobNumber)?.trueCost ?? 0;
+    const cost = labour + (overheadMap.get(j.id) ?? 0) + consumables;
     const margin = j.poValue !== null ? j.poValue - cost : null;
     const late = Math.round((j.completedAt!.getTime() - j.expectedCompletion.getTime()) / DAY);
-    return { j, cost, margin, late };
+    return { j, cost, consumables, margin, late };
   });
   const manMinutes = rangeLogs.reduce(
     (sum, l) => sum + overlapMinutes(l.startedAt, l.endedAt, winStart, winEnd, now),
@@ -370,12 +383,13 @@ async function Production({
                 <th className="px-2 py-2">Dispatched</th>
                 <th className="px-2 py-2">Vs promise</th>
                 <th className="px-2 py-2">PO value</th>
-                <th className="px-2 py-2">Cost</th>
+                <th className="px-2 py-2">Consumables</th>
+                <th className="px-2 py-2">Cost (all-in)</th>
                 <th className="px-2 py-2">Margin</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {dispatchRows.map(({ j, cost, margin, late }) => (
+              {dispatchRows.map(({ j, cost, consumables, margin, late }) => (
                 <tr key={j.id}>
                   <td className="px-2 py-1.5">
                     <Link href={`/jobs/${j.id}`} className="text-blue-700 hover:underline">
@@ -388,6 +402,7 @@ async function Production({
                     {late > 0 ? `${late}d late` : late < 0 ? `${-late}d early` : "on time"}
                   </td>
                   <td className="px-2 py-1.5 whitespace-nowrap">{j.poValue !== null ? formatMoney(j.poValue) : "—"}</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">{consumables > 0 ? formatMoney(consumables) : "—"}</td>
                   <td className="px-2 py-1.5 whitespace-nowrap">{formatMoney(cost)}</td>
                   <td className={`px-2 py-1.5 whitespace-nowrap font-medium ${margin !== null && margin < 0 ? "text-red-700" : "text-green-700"}`}>
                     {margin !== null
@@ -617,7 +632,7 @@ async function KpiReport({
   now: Date;
 }) {
   const days = Math.max(1, Math.round((winEnd.getTime() - winStart.getTime()) / DAY));
-  const [dispatched, logs, reworks, stagesDone, roster, otAgg, leaves] = await Promise.all([
+  const [dispatched, logs, reworks, stagesDone, roster, wip, leaves, consumableMap] = await Promise.all([
     db.job.findMany({
       where: { status: "COMPLETED", completedAt: { gte: winStart, lt: winEnd } },
       include: {
@@ -628,16 +643,17 @@ async function KpiReport({
     }),
     db.timeLog.findMany({
       where: { startedAt: { lt: winEnd }, OR: [{ endedAt: null }, { endedAt: { gt: winStart } }] },
-      select: { startedAt: true, endedAt: true, employeeId: true },
+      select: { startedAt: true, endedAt: true, employeeId: true, employee: { select: { hourlyWage: true } } },
     }),
     db.stageRework.count({ where: { createdAt: { gte: winStart, lt: winEnd } } }),
     db.stage.count({ where: { completedAt: { gte: winStart, lt: winEnd } } }),
     db.employee.count({ where: { active: true } }),
-    db.timeLog.aggregate({
-      where: { endedAt: { gte: winStart, lt: winEnd } },
-      _sum: { otBonusMinutes: true },
+    db.job.findMany({
+      where: { status: { in: ["IN_PROGRESS", "ON_HOLD", "READY_TO_DISPATCH"] } },
+      select: { expectedCompletion: true },
     }),
     db.leaveDay.count({ where: { date: { gte: new Date(from), lte: new Date(to) } } }),
+    getConsumableCosts(),
   ]);
 
   // Delivery
@@ -646,21 +662,36 @@ async function KpiReport({
   // Revenue & margin
   const overheadMap = await overheadByJob(dispatched.map((j) => j.id));
   let revenue = 0,
-    totalCost = 0;
+    totalCost = 0,
+    consumablesCost = 0,
+    cycleDaysSum = 0,
+    lateDaysSum = 0,
+    lateCount = 0;
   for (const j of dispatched) {
     revenue += j.poValue ?? 0;
     const labour = j.timeLogs.reduce((sum, l) => {
       if (l.employee.hourlyWage === null) return sum;
       return (
         sum +
-        (Math.max(0, ((l.endedAt ?? j.completedAt!).getTime() - l.startedAt.getTime()) / 3600000) +
-          l.otBonusMinutes / 60) *
+        Math.max(0, ((l.endedAt ?? j.completedAt!).getTime() - l.startedAt.getTime()) / 3600000) *
           l.employee.hourlyWage
       );
     }, 0);
-    totalCost += labour + (overheadMap.get(j.id) ?? 0);
+    const cons = consumableMap.get(j.jobNumber)?.trueCost ?? 0;
+    consumablesCost += cons;
+    totalCost += labour + (overheadMap.get(j.id) ?? 0) + cons;
+    cycleDaysSum += Math.max(0, (j.completedAt!.getTime() - j.createdAt.getTime()) / DAY);
+    const lateBy = (j.completedAt!.getTime() - j.expectedCompletion.getTime()) / DAY;
+    if (lateBy > 1) {
+      lateCount++;
+      lateDaysSum += lateBy;
+    }
   }
   const margin = revenue - totalCost;
+  const avgCycleDays = dispatched.length > 0 ? cycleDaysSum / dispatched.length : null;
+  const avgLateDays = lateCount > 0 ? lateDaysSum / lateCount : null;
+  const wipOverdue = wip.filter((j) => j.expectedCompletion.getTime() < now.getTime()).length;
+  const consumableShare = totalCost > 0 ? Math.round((consumablesCost / totalCost) * 100) : null;
   // Hours & utilisation
   const manMinutes = logs.reduce((sum, l) => sum + overlapMinutes(l.startedAt, l.endedAt, winStart, winEnd, now), 0);
   const presentDays = new Set(
@@ -671,8 +702,22 @@ async function KpiReport({
   ).size;
   const utilisation = presentDays > 0 ? Math.round((manMinutes / 60 / (presentDays * 8)) * 100) : null;
   const absenteeism = roster > 0 ? Math.round((1 - presentDays / (roster * days)) * 100) : null;
-  const otHours = (otAgg._sum.otBonusMinutes ?? 0) / 60;
+  const otHours =
+    logs.reduce(
+      (sum, l) => sum + otOverlapMinutes(l.startedAt, l.endedAt ?? now, winStart, winEnd),
+      0
+    ) / 60;
   const otShare = manMinutes > 0 ? Math.round(((otHours * 60) / manMinutes) * 100) : null;
+  // Blended labour rate: what an average clocked hour costs in wages.
+  const periodLabourCost = logs.reduce(
+    (sum, l) =>
+      sum +
+      (l.employee.hourlyWage ?? 0) *
+        (overlapMinutes(l.startedAt, l.endedAt, winStart, winEnd, now) / 60),
+    0
+  );
+  const blendedRate = manMinutes > 0 ? periodLabourCost / (manMinutes / 60) : null;
+  const revenuePerHour = manMinutes > 0 && revenue > 0 ? revenue / (manMinutes / 60) : null;
   const reworkRate = stagesDone > 0 ? Math.round((reworks / stagesDone) * 100) : null;
 
   const Kpi = ({ label, value, hint, tone }: { label: string; value: string; hint: string; tone?: "good" | "bad" | "" }) => (
@@ -705,8 +750,40 @@ async function KpiReport({
         <Kpi
           label="Margin"
           value={`${formatMoney(margin)}${revenue > 0 ? ` (${((margin / revenue) * 100).toFixed(0)}%)` : ""}`}
-          hint="PO value minus labour + overhead cost of the dispatched jobs."
+          hint="PO value minus labour + overheads + consumables of the dispatched jobs."
           tone={margin >= 0 ? "good" : "bad"}
+        />
+        <Kpi
+          label="Consumables cost"
+          value={formatMoney(consumablesCost)}
+          hint={`Store-app consumables in the dispatched jobs${consumableShare !== null ? ` — ${consumableShare}% of total cost` : ""}. MNCs watch this creeping past 8–10%.`}
+        />
+        <Kpi
+          label="Revenue per man-hour"
+          value={revenuePerHour !== null ? formatMoney(revenuePerHour) : "—"}
+          hint="PO value dispatched ÷ hours clocked in the period. Your headline productivity number."
+        />
+        <Kpi
+          label="Blended labour rate"
+          value={blendedRate !== null ? `${formatMoney(blendedRate)}/hr` : "—"}
+          hint="Average wage cost of one clocked hour. Rising rate with flat output = costlier mix of workers."
+        />
+        <Kpi
+          label="Avg cycle time"
+          value={avgCycleDays !== null ? `${avgCycleDays.toFixed(1)} d` : "—"}
+          hint="Job created → dispatched, averaged over the period's dispatches. Shorter = faster cash."
+        />
+        <Kpi
+          label="Avg delay when late"
+          value={avgLateDays !== null ? `${avgLateDays.toFixed(1)} d` : lateCount === 0 && dispatched.length > 0 ? "none late" : "—"}
+          hint={`${lateCount} of ${dispatched.length} dispatches were late. How badly promises slip when they slip.`}
+          tone={lateCount === 0 && dispatched.length > 0 ? "good" : avgLateDays !== null ? "bad" : ""}
+        />
+        <Kpi
+          label="WIP on the floor"
+          value={`${wip.length} job${wip.length === 1 ? "" : "s"}`}
+          hint={`${wipOverdue} already past their promised date. High WIP with low dispatches = money stuck on the floor.`}
+          tone={wipOverdue > 0 ? "bad" : wip.length > 0 ? "" : "good"}
         />
         <Kpi
           label="Labour utilisation"
@@ -721,9 +798,9 @@ async function KpiReport({
           tone={reworkRate !== null ? (reworkRate <= 5 ? "good" : "bad") : ""}
         />
         <Kpi
-          label="Overtime share"
-          value={otShare !== null ? `${otShare}%` : "—"}
-          hint={`${otHours.toFixed(0)}h OT credited. High OT with low utilisation = planning problem, not capacity.`}
+          label="Overtime (after 10 PM)"
+          value={`${otHours.toFixed(1)} h${otShare !== null ? ` (${otShare}%)` : ""}`}
+          hint="Hours clocked between 10 PM and 6 AM. High OT with low utilisation = planning problem, not capacity."
         />
         <Kpi
           label="Man-hours worked"
@@ -737,10 +814,11 @@ async function KpiReport({
         />
       </div>
       <p className="text-xs text-slate-500">
-        How to read this like an MNC: OTIF and margin tell you if promises and pricing are right;
-        utilisation and OT share tell you if the shop floor is planned well; rework rate is your
-        quality cost. Chase the worst number first — one point of rework or idle time usually pays
-        for itself faster than more overtime.
+        How to read this like an MNC: OTIF, cycle time and margin tell you if promises and pricing
+        are right; utilisation, WIP and OT tell you if the shop floor is planned well; rework rate
+        and consumables share are your quality and material cost. Chase the worst number first —
+        one point of rework or idle time usually pays for itself faster than more overtime.
+        Consumable figures come from the Store app and cover each job&apos;s lifetime.
       </p>
     </div>
   );

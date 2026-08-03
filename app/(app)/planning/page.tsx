@@ -118,15 +118,15 @@ export default async function PlanningPage() {
       const manMinutes = logs.reduce(
         (s, l) =>
           s +
-          Math.max(0, ((l.endedAt ?? nowDate).getTime() - l.startedAt.getTime()) / 60000) +
-          l.otBonusMinutes,
+          Math.max(0, ((l.endedAt ?? nowDate).getTime() - l.startedAt.getTime()) / 60000),
         0
       );
       const labour = logs.reduce((s, l) => {
         if (l.employee.hourlyWage === null) return s;
-        const hours =
-          Math.max(0, ((l.endedAt ?? nowDate).getTime() - l.startedAt.getTime()) / 3600000) +
-          l.otBonusMinutes / 60;
+        const hours = Math.max(
+          0,
+          ((l.endedAt ?? nowDate).getTime() - l.startedAt.getTime()) / 3600000
+        );
         return s + hours * l.employee.hourlyWage;
       }, 0);
       const started = logs.length

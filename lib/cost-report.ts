@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { overheadByJob } from "@/lib/overheads";
 import { workedByStage, fmtWorked } from "@/lib/idle";
 import { formatDate, formatMoney, jobCode } from "@/lib/format";
+import { otOverlapMinutes } from "@/lib/ot";
+import { getConsumableCosts } from "@/lib/consumables";
 
 // Full cost breakdown of one job as an HTML email — sent to the owner when
 // the job is dispatched. Per-worker hours (incl. OT) × wage, stage times,
@@ -37,19 +39,18 @@ export async function buildDispatchCostEmail(
       perWorker.get(l.employee.id) ??
       { name: l.employee.name, wage: l.employee.hourlyWage, minutes: 0, otMinutes: 0 };
     rec.minutes += Math.max(0, ((l.endedAt ?? end).getTime() - l.startedAt.getTime()) / 60000);
-    rec.otMinutes += l.otBonusMinutes;
+    rec.otMinutes += otOverlapMinutes(l.startedAt, l.endedAt ?? end);
     perWorker.set(l.employee.id, rec);
   }
   const workers = [...perWorker.values()].sort(
-    (a, b) => (b.wage ?? 0) * (b.minutes + b.otMinutes) - (a.wage ?? 0) * (a.minutes + a.otMinutes)
+    (a, b) => (b.wage ?? 0) * b.minutes - (a.wage ?? 0) * a.minutes
   );
-  const labour = workers.reduce(
-    (s, w) => s + (w.wage ?? 0) * ((w.minutes + w.otMinutes) / 60),
-    0
-  );
+  const labour = workers.reduce((s, w) => s + (w.wage ?? 0) * (w.minutes / 60), 0);
   const overheads = (await overheadByJob([jobId])).get(jobId) ?? 0;
-  const total = labour + overheads;
-  const manMinutes = workers.reduce((s, w) => s + w.minutes + w.otMinutes, 0);
+  const consumables =
+    (await getConsumableCosts()).get(job.jobNumber)?.trueCost ?? 0;
+  const total = labour + overheads + consumables;
+  const manMinutes = workers.reduce((s, w) => s + w.minutes, 0);
   const stageWorked = workedByStage(job.timeLogs, end);
   const started = job.timeLogs.length
     ? new Date(Math.min(...job.timeLogs.map((l) => l.startedAt.getTime())))
@@ -64,11 +65,11 @@ export async function buildDispatchCostEmail(
       (w) => `<tr>
         <td ${td}>${w.name}</td>
         <td ${tdR}>${(w.minutes / 60).toFixed(1)}${
-        w.otMinutes > 0 ? ` + ${(w.otMinutes / 60).toFixed(1)} OT` : ""
+        w.otMinutes > 0 ? ` (incl. ${(w.otMinutes / 60).toFixed(1)} after 10 PM)` : ""
       }</td>
         <td ${tdR}>${w.wage ?? "not set"}</td>
         <td ${tdR}><b>${
-        w.wage !== null ? formatMoney(w.wage * ((w.minutes + w.otMinutes) / 60)) : "—"
+        w.wage !== null ? formatMoney(w.wage * (w.minutes / 60)) : "—"
       }</b></td>
       </tr>`
     )
@@ -101,6 +102,11 @@ export async function buildDispatchCostEmail(
       </tr>
       <tr><td style="padding:4px 10px">Labour</td><td style="padding:4px 10px;text-align:right">${formatMoney(labour)}</td></tr>
       <tr><td style="padding:4px 10px">Overheads (job's share)</td><td style="padding:4px 10px;text-align:right">${formatMoney(overheads)}</td></tr>
+      ${
+        consumables > 0
+          ? `<tr><td style="padding:4px 10px">Consumables (from Store app)</td><td style="padding:4px 10px;text-align:right">${formatMoney(consumables)}</td></tr>`
+          : ""
+      }
       ${
         job.poValue
           ? `<tr><td style="padding:4px 10px">PO value (without GST)</td><td style="padding:4px 10px;text-align:right">${formatMoney(job.poValue)}</td></tr>

@@ -25,6 +25,8 @@ import { ATTACHMENT_KIND_LABELS, formatFileSize } from "@/lib/attachments";
 import { workedByStage, fmtWorked } from "@/lib/idle";
 import { formatMoney } from "@/lib/format";
 import { overheadByJob } from "@/lib/overheads";
+import { getConsumableCosts } from "@/lib/consumables";
+import { otOverlapMinutes } from "@/lib/ot";
 import { updateOverheadItem } from "@/lib/actions/overheads";
 
 export const dynamic = "force-dynamic";
@@ -150,9 +152,10 @@ export default async function JobPage({
     const rec =
       perWorker.get(l.employee.id) ??
       { name: l.employee.name, wage: l.employee.hourlyWage, minutes: 0 };
-    rec.minutes +=
-      Math.max(0, ((l.endedAt ?? costEnd).getTime() - l.startedAt.getTime()) / 60000) +
-      l.otBonusMinutes; // full-night +4h OT credit
+    rec.minutes += Math.max(
+      0,
+      ((l.endedAt ?? costEnd).getTime() - l.startedAt.getTime()) / 60000
+    );
     perWorker.set(l.employee.id, rec);
   }
   const workerCosts = [...perWorker.values()].sort(
@@ -163,6 +166,12 @@ export default async function JobPage({
   // Supervisor-salary overheads: punched-in days ÷ 30, split over the unit's
   // jobs running each day.
   const overheads = (await overheadByJob([id])).get(id) ?? 0;
+  // Consumables issued to this job in the Store app — owner-only figures.
+  const consumables =
+    user.role === "SUPERADMIN"
+      ? (await getConsumableCosts()).get(job.jobNumber) ?? null
+      : null;
+  const consumableCost = consumables?.trueCost ?? 0;
   // Running fixed overheads that touch this job's unit — editable in place.
   const overheadItems =
     user.role === "SUPERADMIN"
@@ -333,9 +342,10 @@ export default async function JobPage({
             {(workerCosts.length > 0 || overheads > 0) && (
               <details className="mt-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm max-w-xl">
                 <summary className="cursor-pointer select-none font-semibold text-emerald-900">
-                  💰 Cost so far: {formatMoney(labourCost + overheads)}
+                  💰 Cost so far: {formatMoney(labourCost + overheads + consumableCost)}
                   <span className="font-normal">
-                    {" "}(labour {formatMoney(labourCost)} + overheads {formatMoney(overheads)})
+                    {" "}(labour {formatMoney(labourCost)} + overheads {formatMoney(overheads)}
+                    {consumableCost > 0 ? <> + consumables {formatMoney(consumableCost)}</> : null})
                   </span>
                   {user.role === "SUPERADMIN" && unpricedCount > 0 && (
                     <span className="font-normal text-amber-700">
@@ -376,6 +386,31 @@ export default async function JobPage({
                     <span>Overheads (this job&apos;s share of running costs)</span>
                     <span className="font-medium">{formatMoney(overheads)}</span>
                   </p>
+                )}
+                {/* Consumables from the Store app — owner-only */}
+                {consumables !== null && consumableCost > 0 && (
+                  <div className="mt-1.5 pt-1.5 border-t border-emerald-100 text-xs space-y-0.5">
+                    <p className="flex justify-between">
+                      <span>Consumables (from Store app)</span>
+                      <span className="font-medium">{formatMoney(consumables.trueCost)}</span>
+                    </p>
+                    <p className="flex justify-between text-emerald-700">
+                      <span className="pl-3">Issued directly to this job</span>
+                      <span>{formatMoney(consumables.direct)}</span>
+                    </p>
+                    {consumables.sharedAlloc > 0 && (
+                      <p className="flex justify-between text-emerald-700">
+                        <span className="pl-3">Share of general shop consumables</span>
+                        <span>{formatMoney(consumables.sharedAlloc)}</span>
+                      </p>
+                    )}
+                    {consumables.overheadAlloc > 0 && (
+                      <p className="flex justify-between text-emerald-700">
+                        <span className="pl-3">Share of store overheads</span>
+                        <span>{formatMoney(consumables.overheadAlloc)}</span>
+                      </p>
+                    )}
+                  </div>
                 )}
 
                 {/* Edit the fixed overhead costs right here — changes the
@@ -791,8 +826,10 @@ export default async function JobPage({
                           {l.endedAt ? formatDuration(l.startedAt, l.endedAt) : (
                             <LiveDuration since={l.startedAt} />
                           )}
-                          {l.otBonusMinutes > 0 && (
-                            <span className="text-indigo-700 font-semibold"> +{Math.round(l.otBonusMinutes / 60)}h OT</span>
+                          {otOverlapMinutes(l.startedAt, l.endedAt ?? new Date()) > 0 && (
+                            <span className="text-indigo-700 font-semibold">
+                              {" "}🌙 {(otOverlapMinutes(l.startedAt, l.endedAt ?? new Date()) / 60).toFixed(1)}h OT
+                            </span>
                           )}
                           {l.endSource === "AUTO_SHIFT_END" && " 🌙"}
                         </span>
@@ -1158,9 +1195,9 @@ export default async function JobPage({
                     {log.endedAt ? formatDuration(log.startedAt, log.endedAt) : (
                       <LiveDuration since={log.startedAt} />
                     )}
-                    {log.otBonusMinutes > 0 && (
+                    {log.endedAt && otOverlapMinutes(log.startedAt, log.endedAt) > 0 && (
                       <span className="ml-1 text-xs font-semibold text-indigo-700">
-                        +{Math.round(log.otBonusMinutes / 60)}h OT
+                        🌙 {(otOverlapMinutes(log.startedAt, log.endedAt) / 60).toFixed(1)}h OT
                       </span>
                     )}
                   </td>

@@ -35,15 +35,12 @@ export function shiftPlanLabel(plannedEndAt: Date): string {
 
 // Close every open clock whose cutoff has passed — the recorded end time is
 // the cutoff itself, not when this sweep happened to run. Called by the
-// scheduled cron and lazily on dashboard loads. Full-night clocks (2:30 AM
-// cutoff, IST hour = 2) get the +4h OT credit as they close.
+// scheduled cron and lazily on dashboard loads. (OT is no longer a stored
+// bonus: it's computed as worked time after 22:00 IST — see lib/ot.ts.)
 export async function closeOverdueShifts(): Promise<number> {
   const count = await db.$executeRaw(
     Prisma.sql`UPDATE "TimeLog"
-       SET "endedAt" = "plannedEndAt", "endSource" = 'AUTO_SHIFT_END',
-           "otBonusMinutes" = CASE
-             WHEN EXTRACT(HOUR FROM ("plannedEndAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')) = 2
-             THEN 240 ELSE 0 END
+       SET "endedAt" = "plannedEndAt", "endSource" = 'AUTO_SHIFT_END'
        WHERE "endedAt" IS NULL AND "plannedEndAt" <= ${new Date()}`
   );
   if (count > 0) {
