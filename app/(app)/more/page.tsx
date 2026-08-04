@@ -36,6 +36,9 @@ export default async function MorePage() {
     ...(user.role === "SUPERADMIN" ? [{ href: "/planner", label: "Owner's Scorecard", icon: "📅" }] : []),
     ...(user.role === "SUPERADMIN" ? [{ href: "/overheads", label: "Overhead Costs", icon: "💸" }] : []),
     ...(user.role === "SUPERADMIN" ? [{ href: "/audit", label: "Audit Trail", icon: "🔍" }] : []),
+    ...(user.role === "SUPERADMIN"
+      ? [{ href: "/api/whatsapp/test", label: "Test WhatsApp Alerts", icon: "💬" }]
+      : []),
     { href: "/account", label: "My Account & Password", icon: "⚙️" },
   ];
 

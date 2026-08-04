@@ -42,12 +42,16 @@ export function whatsappConfigured(): boolean {
   );
 }
 
-async function sendViaMeta(to: string, text: string): Promise<boolean> {
+type SendResult = { ok: boolean; error?: string };
+
+async function sendViaMeta(to: string, text: string): Promise<SendResult> {
   const token = process.env.WHATSAPP_TOKEN!;
   const phoneId = process.env.WHATSAPP_PHONE_ID!;
   const template = process.env.WHATSAPP_TEMPLATE;
   // A template is required outside the 24-hour customer service window; a
-  // plain text message is fine (and simpler) inside it.
+  // plain text message is fine (and simpler) inside it. Meta rejects template
+  // parameters containing line breaks, so the template variant goes on one
+  // line with · separators.
   const body = template
     ? {
         messaging_product: "whatsapp",
@@ -56,7 +60,12 @@ async function sendViaMeta(to: string, text: string): Promise<boolean> {
         template: {
           name: template,
           language: { code: process.env.WHATSAPP_TEMPLATE_LANG || "en" },
-          components: [{ type: "body", parameters: [{ type: "text", text }] }],
+          components: [
+            {
+              type: "body",
+              parameters: [{ type: "text", text: text.replace(/\s*\n+\s*/g, " · ").trim() }],
+            },
+          ],
         },
       }
     : {
@@ -73,13 +82,14 @@ async function sendViaMeta(to: string, text: string): Promise<boolean> {
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) {
-    console.error("whatsapp (meta) failed:", res.status, await res.text().catch(() => ""));
-    return false;
+    const detail = await res.text().catch(() => "");
+    console.error("whatsapp (meta) failed:", res.status, detail);
+    return { ok: false, error: `${res.status}: ${detail.slice(0, 300)}` };
   }
-  return true;
+  return { ok: true };
 }
 
-async function sendViaTwilio(to: string, text: string): Promise<boolean> {
+async function sendViaTwilio(to: string, text: string): Promise<SendResult> {
   const sid = process.env.TWILIO_ACCOUNT_SID!;
   const token = process.env.TWILIO_AUTH_TOKEN!;
   const from = process.env.TWILIO_WHATSAPP_FROM!;
@@ -98,24 +108,41 @@ async function sendViaTwilio(to: string, text: string): Promise<boolean> {
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) {
-    console.error("whatsapp (twilio) failed:", res.status, await res.text().catch(() => ""));
-    return false;
+    const detail = await res.text().catch(() => "");
+    console.error("whatsapp (twilio) failed:", res.status, detail);
+    return { ok: false, error: `${res.status}: ${detail.slice(0, 300)}` };
   }
-  return true;
+  return { ok: true };
+}
+
+export function whatsappProvider(): "meta" | "twilio" | null {
+  if (process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID) return "meta";
+  if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_WHATSAPP_FROM) {
+    return "twilio";
+  }
+  return null;
+}
+
+// Sends to every recipient; reports what happened to each number.
+export async function sendWhatsAppDetailed(
+  text: string
+): Promise<{ to: string; ok: boolean; error?: string }[]> {
+  const provider = whatsappProvider();
+  if (!provider) return [];
+  const out: { to: string; ok: boolean; error?: string }[] = [];
+  for (const to of whatsappRecipients()) {
+    try {
+      const r = provider === "meta" ? await sendViaMeta(to, text) : await sendViaTwilio(to, text);
+      out.push({ to, ...r });
+    } catch (err) {
+      console.error(`whatsapp to ${to} failed:`, err);
+      out.push({ to, ok: false, error: String(err) });
+    }
+  }
+  return out;
 }
 
 // Sends to every recipient; returns how many messages went out.
 export async function sendWhatsApp(text: string): Promise<number> {
-  if (!whatsappConfigured()) return 0;
-  const useMeta = !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID);
-  let sent = 0;
-  for (const to of whatsappRecipients()) {
-    try {
-      const ok = useMeta ? await sendViaMeta(to, text) : await sendViaTwilio(to, text);
-      if (ok) sent++;
-    } catch (err) {
-      console.error(`whatsapp to ${to} failed:`, err);
-    }
-  }
-  return sent;
+  return (await sendWhatsAppDetailed(text)).filter((r) => r.ok).length;
 }
