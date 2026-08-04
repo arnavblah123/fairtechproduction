@@ -615,6 +615,9 @@ model LabourActivity {
   clientId    String   @unique
   subjectId   String
   subjectName String
+  // Who did it — the logged-in production user whose session pushed this
+  // batch (null for key-authenticated external callers).
+  actorName   String?
   action      String
   notes       String?
   occurredAt  DateTime
@@ -628,4 +631,18 @@ model LabourSnapshot {
   id        String   @id
   data      Json
   updatedAt DateTime @updatedAt
+}
+
+// Shared state of every worker in the labour calling list. The app ships a
+// static seed list; this table holds whatever has since changed (status,
+// follow-up date, notes, saved/hired) plus any worker added in-app, so all
+// callers see one live list instead of a private copy per phone.
+model LabourWorkerState {
+  seekerId  String   @id
+  phone     String?
+  data      Json // the full worker record as the app stores it
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@index([updatedAt])
 }

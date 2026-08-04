@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireUser, assertUnitAccess, isAdmin } from "@/lib/permissions";
+import { handOverItem } from "@/lib/inventory";
 import type { StageStatus } from "@prisma/client";
 
 function revalidateJob(jobId: string) {
@@ -413,6 +414,34 @@ export async function shiftWorker(formData: FormData) {
     await assignGeneralDuty(fd);
   }
   // target "none" = leave the worker stopped for now.
+
+  // Consumables he is still holding. The supervisor answered one question per
+  // item: does it go with him, or is he done with it (and how much is left)?
+  // "Keep" leaves the store app splitting its cost by his logged hours;
+  // "done" settles it and puts the leftover back into stock automatically.
+  // The job he is going TO is the one that joins the split — that may be a
+  // different job entirely now that people can be shifted across jobs.
+  const nextJob = target.startsWith("stage:")
+    ? await db.stage
+        .findUnique({
+          where: { id: target.slice("stage:".length) },
+          select: { job: { select: { jobNumber: true } } },
+        })
+        .then((s) => s?.job ?? null)
+    : await db.job.findUnique({ where: { id: jobId }, select: { jobNumber: true } });
+  for (const [field, raw] of formData.entries()) {
+    const m = /^use:(\d+)$/.exec(field);
+    if (!m) continue;
+    const useId = Number(m[1]);
+    const answer = String(raw);
+    if (answer === "keep") {
+      await handOverItem({ useId, continues: true, nextJobNumber: nextJob?.jobNumber });
+    } else if (answer === "done") {
+      const left = Number(formData.get(`left:${useId}`) ?? 0);
+      await handOverItem({ useId, continues: false, leftoverQty: Number.isFinite(left) ? left : 0 });
+    }
+    // "" (unanswered) = leave it open; the store settles it by hours anyway
+  }
 
   redirect(remaining.length > 0 ? `/jobs/${jobId}?shift=${remaining.join(",")}` : `/jobs/${jobId}`);
 }
