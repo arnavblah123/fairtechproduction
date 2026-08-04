@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireUser, isAdmin, lockHrToLabour} from "@/lib/permissions";
+import { requireUser, isAdmin, allowPurchaseHr} from "@/lib/permissions";
 import {
   createPlan,
   deletePlan,
@@ -24,7 +24,7 @@ const DAY = 86400000;
 
 export default async function PlanningPage() {
   const user = await requireUser();
-  lockHrToLabour(user);
+  allowPurchaseHr(user); // Purchase/HR may see this page
   const owner = user.role === "SUPERADMIN";
   const admin = isAdmin(user);
 
@@ -32,7 +32,7 @@ export default async function PlanningPage() {
     db.plan.findMany({
       // Supervisors/admins see their units' plans plus general (all-unit) ones.
       where:
-        user.role === "SUPERADMIN"
+        user.role === "SUPERADMIN" || user.role === "PURCHASE_HR"
           ? {}
           : { OR: [{ unitId: null }, { unitId: { in: user.unitIds } }] },
       include: {
@@ -144,7 +144,10 @@ export default async function PlanningPage() {
   // Unit-wise grouping: each unit section shows its current plan and its
   // past plans; plans without a unit go under "All units".
   const visibleUnits = units.filter(
-    (u) => user.role === "SUPERADMIN" || user.unitIds.includes(u.id)
+    (u) =>
+      user.role === "SUPERADMIN" ||
+      user.role === "PURCHASE_HR" || // purchase plans for every unit
+      user.unitIds.includes(u.id)
   );
   const covering = (p: (typeof plans)[0]) =>
     p.startDate.getTime() <= now && now <= p.endDate.getTime() + DAY;

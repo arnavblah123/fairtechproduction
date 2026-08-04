@@ -12,14 +12,22 @@ export default async function AppLayout({
   const user = await requireUser();
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
   const isHr = user.role === "HR";
+  const isPurchaseHr = user.role === "PURCHASE_HR";
   // Fairtech Store (consumables app) — its own Vercel deployment; owner-only
   // link. Override the URL with CONSUMABLES_URL if the project name differs.
   const storeUrl =
     process.env.CONSUMABLES_URL ?? "https://fairtechconsumablesystem.vercel.app";
 
-  // HR accounts get exactly one page: Labour.
+  // HR accounts get exactly one page: Labour. Purchase/HR also see what the
+  // shop floor needs (Issues) and what is coming up (Planning).
   const links = isHr
     ? [{ href: "/labour", label: "Labour" }]
+    : isPurchaseHr
+    ? [
+        { href: "/issues", label: "Issues" },
+        { href: "/planning", label: "Planning" },
+        { href: "/labour", label: "Labour" },
+      ]
     : [
         { href: "/", label: "Dashboard" },
         { href: "/jobs", label: "Jobs" },
@@ -49,7 +57,7 @@ export default async function AppLayout({
           </Link>
           {/* Desktop nav; phones use the bottom tab bar instead. HR has no
               tab bar, so their single link stays visible on phones too. */}
-          <nav className={`flex-1 overflow-x-auto ${isHr ? "" : "hidden sm:block"}`}>
+          <nav className={`flex-1 overflow-x-auto ${isHr || isPurchaseHr ? "" : "hidden sm:block"}`}>
             <ul className="flex gap-1 text-sm">
               {links.map((l) => (
                 <li key={l.href}>
@@ -87,7 +95,7 @@ export default async function AppLayout({
       </header>
       {/* Bottom padding on phones so content never hides behind the tab bar */}
       <main className="max-w-7xl mx-auto p-4 pb-20 sm:pb-4">{children}</main>
-      {!isHr && <MobileNav />}
+      {!isHr && !isPurchaseHr && <MobileNav />}
     </div>
   );
 }

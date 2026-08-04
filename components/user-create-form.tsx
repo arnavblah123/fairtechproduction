@@ -34,6 +34,9 @@ export function UserCreateForm({
           <option value="SUPERVISOR">Supervisor</option>
           {canCreateAdmins && <option value="ADMIN">Admin</option>}
           {canCreateAdmins && <option value="HR">HR (Labour app only)</option>}
+          {canCreateAdmins && (
+            <option value="PURCHASE_HR">Purchase / HR (Labour + Issues + Planning)</option>
+          )}
         </select>
       </div>
       <div className="flex flex-wrap gap-3 items-center text-sm">

@@ -18,6 +18,7 @@ enum Role {
   ADMIN
   SUPERVISOR
   HR // access to the Labour page (wages / ESI-PF) only
+  PURCHASE_HR // Labour app + issues (what's needed) + planning, nothing else
 }
 
 model User {
@@ -461,6 +462,7 @@ model Issue {
   unit         Unit        @relation(fields: [unitId], references: [id])
   type         IssueType
   description  String
+  dueAt        DateTime? // by when it must be resolved (sent in the WhatsApp alert)
   status       IssueStatus @default(OPEN)
   raisedById   String
   raisedBy     User        @relation("IssueRaisedBy", fields: [raisedById], references: [id])

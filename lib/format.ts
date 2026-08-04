@@ -67,3 +67,9 @@ export function formatMoney(rupees: number): string {
 export function jobCode(jobNumber: number): string {
   return `JOB-${String(jobNumber).padStart(4, "0")}`;
 }
+
+// YYYY-MM-DD for <input type="date">, N days from today in IST.
+export function istDateInput(daysFromToday = 0): string {
+  const d = new Date(Date.now() + daysFromToday * 86400000);
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}

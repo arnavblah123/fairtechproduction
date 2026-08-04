@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireUser, assertUnitAccess } from "@/lib/permissions";
+import { sendIssueAlert } from "@/lib/issue-alert";
 import type { IssueType } from "@prisma/client";
 
 export async function raiseIssue(formData: FormData) {
@@ -12,13 +13,24 @@ export async function raiseIssue(formData: FormData) {
   const type = String(formData.get("type") ?? "OTHER") as IssueType;
   const description = String(formData.get("description") ?? "").trim();
   if (!description) return;
+  const dueRaw = String(formData.get("dueAt") ?? "").trim();
+  const dueAt = dueRaw ? new Date(dueRaw) : null;
   const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
   assertUnitAccess(user, job.unitId);
 
   const issue = await db.issue.create({
-    data: { jobId, unitId: job.unitId, type, description, raisedById: user.id },
+    data: {
+      jobId,
+      unitId: job.unitId,
+      type,
+      description,
+      dueAt: dueAt && !isNaN(dueAt.getTime()) ? dueAt : null,
+      raisedById: user.id,
+    },
   });
   await audit(user.id, "issue.raise", "Issue", issue.id, { jobId, type });
+  // Straight to Jagdish and the owner on WhatsApp.
+  await sendIssueAlert(issue.id);
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/issues");
   revalidatePath("/");

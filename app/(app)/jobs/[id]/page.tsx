@@ -14,7 +14,7 @@ import {
   PriorityBadge,
 } from "@/components/badges";
 import { LiveDuration } from "@/components/live-duration";
-import { formatDate, formatDateTime, formatDuration, jobCode } from "@/lib/format";
+import { formatDate, formatDateTime, formatDuration, istDateInput, jobCode } from "@/lib/format";
 import { googleCalendarLink, isCalendarConfigured } from "@/lib/google-calendar";
 import { AttachmentUpload } from "@/components/attachment-upload";
 import { QuickAddEmployee } from "@/components/quick-add-employee";
@@ -714,6 +714,17 @@ export default async function JobPage({
                 <span className="ml-2">{issue.description}</span>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Raised by {issue.raisedBy.name} · {formatDateTime(issue.createdAt)}
+                  {issue.dueAt && (
+                    <span
+                      className={
+                        issue.status === "OPEN" && issue.dueAt.getTime() < Date.now()
+                          ? " text-red-600 font-medium"
+                          : ""
+                      }
+                    >
+                      {" "}· resolve by {formatDate(issue.dueAt)}
+                    </span>
+                  )}
                   {issue.status === "RESOLVED" &&
                     ` · Resolved by ${issue.resolvedBy?.name ?? "—"}`}
                 </p>
@@ -743,10 +754,24 @@ export default async function JobPage({
             placeholder="What's the problem?"
             className="flex-1 min-w-40 rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
           />
+          <label className="flex items-center gap-1.5 text-sm">
+            <span className="text-slate-500 whitespace-nowrap">Resolve by</span>
+            <input
+              name="dueAt"
+              type="date"
+              required
+              defaultValue={istDateInput(1)}
+              className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+            />
+          </label>
           <button className={`${btn} bg-red-600 text-white hover:bg-red-700`}>
             🚩 Raise Issue
           </button>
         </form>
+        <p className="text-xs text-slate-400 mt-1.5">
+          Raising an issue sends a WhatsApp to Jagdish and the owner straight away.
+        </p>
       </section>
 
       {/* Stage board */}

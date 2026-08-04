@@ -126,6 +126,8 @@ export async function createJob(
     return { error: err instanceof Error ? err.message : String(err) };
   }
 
+  // Set when the job is created with material missing — alerted after commit.
+  let autoIssueId: string | null = null;
   const job = await db.$transaction(async (tx) => {
     let usedTemplateId = templateId;
 
@@ -213,9 +215,11 @@ export async function createJob(
                   timeZone: "Asia/Kolkata",
                 })}`
           }`,
+          dueAt: isNaN(neededBy.getTime()) ? null : neededBy,
           raisedById: user.id,
         },
       });
+      autoIssueId = issue.id;
       await audit(user.id, "issue.autoRaise", "Issue", issue.id, {
         jobId: created.id,
         reason: "material not available at job creation",
@@ -230,6 +234,10 @@ export async function createJob(
   }).catch((err: Error) => ({ error: err.message }));
 
   if ("error" in job) return { error: job.error };
+  if (autoIssueId) {
+    const { sendIssueAlert } = await import("@/lib/issue-alert");
+    await sendIssueAlert(autoIssueId); // WhatsApp to Jagdish + owner
+  }
   await syncJobToCalendar(job.id); // best-effort; never blocks job creation
   revalidatePath("/");
   revalidatePath("/jobs");

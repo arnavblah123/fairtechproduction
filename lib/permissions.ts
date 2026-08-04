@@ -15,9 +15,20 @@ export async function requireRole(...roles: Role[]): Promise<SessionUser> {
 }
 
 // HR accounts exist only for the Labour app (served at /labour) — bounce
-// them there from every production page.
+// them there from every production page. Purchase/HR accounts get the Labour
+// app plus Issues and Planning, so they are bounced from everything else.
 export function lockHrToLabour(user: SessionUser) {
   if (user.role === "HR") redirect("/labour");
+  if (user.role === "PURCHASE_HR") redirect("/issues");
+}
+
+// Pages a Purchase/HR login may open (besides the static Labour app).
+export function allowPurchaseHr(user: SessionUser) {
+  if (user.role === "HR") redirect("/labour");
+}
+
+export function isPurchaseHr(user: SessionUser) {
+  return user.role === "PURCHASE_HR";
 }
 
 export function isAdmin(user: SessionUser) {
@@ -36,7 +47,8 @@ export function assertUnitAccess(user: SessionUser, unitId: string) {
 }
 
 // Prisma `where` fragment limiting a query to the user's units.
+// Purchase/HR is a company-wide desk — they buy and hire for every unit.
 export function unitScope(user: SessionUser): { unitId?: { in: string[] } } {
-  if (user.role === "SUPERADMIN") return {};
+  if (user.role === "SUPERADMIN" || user.role === "PURCHASE_HR") return {};
   return { unitId: { in: user.unitIds } };
 }

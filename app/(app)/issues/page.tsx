@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireUser, unitScope, lockHrToLabour} from "@/lib/permissions";
+import { requireUser, unitScope, allowPurchaseHr} from "@/lib/permissions";
 import { resolveIssue } from "@/lib/actions/issues";
 import { IssueBadge } from "@/components/badges";
-import { formatDateTime, jobCode } from "@/lib/format";
+import { formatDate, formatDateTime, jobCode } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ export default async function IssuesPage({
   searchParams: Promise<{ show?: string }>;
 }) {
   const user = await requireUser();
-  lockHrToLabour(user);
+  allowPurchaseHr(user); // Purchase/HR may see this page
   const { show } = await searchParams;
   const showResolved = show === "all";
 
@@ -23,7 +23,8 @@ export default async function IssuesPage({
       ...(showResolved ? {} : { status: "OPEN" }),
     },
     include: { job: true, unit: true, raisedBy: true, resolvedBy: true },
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    // Soonest deadline first — what purchase must chase today sits on top.
+    orderBy: [{ status: "asc" }, { dueAt: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
     take: 200,
   });
 
@@ -56,6 +57,20 @@ export default async function IssuesPage({
                 <span className="text-xs text-slate-400">{issue.unit.name}</span>
               </div>
               <p className="text-sm mt-1">{issue.description}</p>
+              {issue.dueAt && (
+                <p className="text-xs mt-0.5">
+                  <span
+                    className={
+                      issue.status === "OPEN" && issue.dueAt < new Date()
+                        ? "text-red-600 font-semibold"
+                        : "text-slate-500"
+                    }
+                  >
+                    ⏳ Resolve by {formatDate(issue.dueAt)}
+                    {issue.status === "OPEN" && issue.dueAt < new Date() && " — overdue"}
+                  </span>
+                </p>
+              )}
               <p className="text-xs text-slate-400 mt-0.5">
                 Raised by {issue.raisedBy.name} · {formatDateTime(issue.createdAt)}
                 {issue.status === "RESOLVED" &&
