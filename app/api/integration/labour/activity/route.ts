@@ -52,6 +52,71 @@ export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
 }
 
+const CALL_ACTIONS = new Set(["call_started", "call_saved_contact", "call_followup", "call_retry"]);
+const OUTCOME_ACTIONS = new Set([
+  "not_interested",
+  "call_later",
+  "no_response",
+  "saved_contact",
+  "hired",
+  "interested",
+]);
+
+// Team report: per-person and per-day totals across everyone's devices, so
+// the app can show who is doing what without each phone knowing the others.
+export async function GET(req: NextRequest) {
+  const denied = await unauthorized(req);
+  if (denied) return denied;
+
+  const days = Math.min(Math.max(Number(req.nextUrl.searchParams.get("days") || 14), 1), 60);
+  const IST_MS = 5.5 * 3600 * 1000;
+  const istNow = new Date(Date.now() + IST_MS);
+  const todayKey = istNow.toISOString().slice(0, 10);
+  const from = new Date(
+    Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate() - (days - 1)) - IST_MS
+  );
+
+  const rows = await prisma.labourActivity.findMany({
+    where: { occurredAt: { gte: from } },
+    orderBy: { occurredAt: "asc" },
+    select: { actorName: true, action: true, occurredAt: true, subjectId: true },
+  });
+
+  type Bucket = { calls: number; entered: number; msgs: number; workers: Set<string> };
+  const mk = (): Bucket => ({ calls: 0, entered: 0, msgs: 0, workers: new Set() });
+  const byPerson: Record<string, Bucket> = {};
+  const byPersonToday: Record<string, Bucket> = {};
+  const byDay: Record<string, Bucket> = {};
+
+  for (const r of rows) {
+    const dayKey = new Date(r.occurredAt.getTime() + IST_MS).toISOString().slice(0, 10);
+    const who = r.actorName || "Unknown device";
+    for (const [map, key] of [
+      [byPerson, who],
+      [byDay, dayKey],
+      ...(dayKey === todayKey ? ([[byPersonToday, who]] as const) : []),
+    ] as Array<[Record<string, Bucket>, string]>) {
+      const b = (map[key] = map[key] || mk());
+      if (CALL_ACTIONS.has(r.action)) {
+        b.calls++;
+        b.workers.add(r.subjectId);
+      }
+      if (OUTCOME_ACTIONS.has(r.action)) b.entered++;
+      if (r.action === "whatsapp_sent") b.msgs++;
+    }
+  }
+
+  const flat = (m: Record<string, Bucket>) =>
+    Object.fromEntries(
+      Object.entries(m).map(([k, b]) => [k, { calls: b.calls, entered: b.entered, msgs: b.msgs, workers: b.workers.size }])
+    );
+
+  return NextResponse.json(
+    { today: todayKey, days, byPerson: flat(byPerson), byPersonToday: flat(byPersonToday), byDay: flat(byDay) },
+    { headers: corsHeaders(req) }
+  );
+}
+
 type IncomingActivity = {
   id?: string;
   subjectId?: string;
