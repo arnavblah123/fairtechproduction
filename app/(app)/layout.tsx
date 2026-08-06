@@ -26,6 +26,7 @@ export default async function AppLayout({
     ? [
         { href: "/issues", label: "Issues" },
         { href: "/planning", label: "Planning" },
+        { href: "/roadmap", label: "Road Map" },
         { href: "/labour", label: "Labour" },
       ]
     : [
@@ -36,6 +37,7 @@ export default async function AppLayout({
         { href: "/employees", label: "Employees" },
         { href: "/issues", label: "Issues" },
         { href: "/planning", label: "Planning" },
+        { href: "/roadmap", label: "Road Map" },
         ...(user.role === "SUPERADMIN" ? [{ href: "/labour", label: "Labour" }] : []),
         ...(user.role === "SUPERADMIN" ? [{ href: storeUrl, label: "Store" }] : []),
         { href: "/history", label: "History" },

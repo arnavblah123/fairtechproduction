@@ -19,6 +19,7 @@ export default async function MorePage() {
     { href: "/employees", label: "Workers", icon: "👷" },
     { href: "/issues", label: "Issues", icon: "🚩" },
     { href: "/planning", label: "Production Planning", icon: "🗓️" },
+    { href: "/roadmap", label: "Manufacturing Road Map", icon: "🗺️" },
     ...(user.role === "SUPERADMIN" ? [{ href: "/labour", label: "Labour App", icon: "💼" }] : []),
     ...(user.role === "SUPERADMIN"
       ? [{

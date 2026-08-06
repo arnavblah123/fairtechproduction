@@ -112,6 +112,40 @@ export default async function TodoPage() {
         </div>
       )}
 
+      {/* Today's road-map labour plan: put these men on these activities */}
+      {data.roadmapPlan.length > 0 && (
+        <section className="bg-white rounded-xl shadow-sm p-4 space-y-2">
+          <h2 className="font-semibold">
+            🗺️ Today&apos;s road map — who works on what{" "}
+            <Link href="/roadmap" className="text-sm font-normal text-blue-600 hover:underline">
+              full sheet →
+            </Link>
+          </h2>
+          {data.roadmapPlan.map((r) => (
+            <div
+              key={`${r.jobId}-${r.sequence}`}
+              className="rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 text-sm"
+            >
+              <p className="font-medium">
+                <Link href={`/jobs/${r.jobId}`} className="text-blue-700 hover:underline">
+                  {r.jobDescription}
+                </Link>{" "}
+                <span className="text-slate-400 text-xs">{jobCode(r.jobNumber)}</span> ·{" "}
+                {r.sequence}. {r.stageName}
+                {!r.started && (
+                  <span className="ml-2 rounded-full bg-amber-200 px-2 py-0.5 text-[11px]">
+                    not started yet
+                  </span>
+                )}
+              </p>
+              <p className="text-slate-600 mt-0.5">
+                👷 {r.workers.map((w) => `${w.name} (${w.skill})`).join(", ")}
+              </p>
+            </div>
+          ))}
+        </section>
+      )}
+
       <Section title="📌 From the owner" count={data.ownerTodos.length}>
         {data.ownerTodos.map((t) => (
           <div

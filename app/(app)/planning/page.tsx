@@ -396,11 +396,19 @@ export default async function PlanningPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold">Production Planning</h1>
-        {!owner && (
-          <span className="text-xs text-slate-500">
-            Planning is set by management — check your unit&apos;s targets daily.
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          <Link
+            href="/roadmap"
+            className="rounded-lg bg-slate-900 text-white px-3 py-1.5 text-sm font-medium"
+          >
+            🗺️ Road Map
+          </Link>
+          {!owner && (
+            <span className="text-xs text-slate-500">
+              Planning is set by management — check your unit&apos;s targets daily.
+            </span>
+          )}
+        </div>
       </div>
 
       {/* New plan (owner only) */}

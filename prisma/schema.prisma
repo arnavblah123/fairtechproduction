@@ -169,6 +169,7 @@ model Employee {
   timeLogs    TimeLog[]
   disciplines Discipline[]
   leaveDays   LeaveDay[]
+  planWorkers StagePlanWorker[]
 }
 
 // "On leave today" acknowledgment — ticked by a supervisor/owner when a
@@ -329,13 +330,32 @@ model Stage {
   // Quality check: who inspected the stage when it was marked Done.
   inspectedBy String?
   inspectedAt DateTime?
+  // Manufacturing road map (FTE/PRD/RM): the planned bar for this activity.
+  // The actual bar is drawn from the days work was really logged.
+  plannedStart DateTime?
+  plannedEnd   DateTime?
+  roadmapNote  String? // short cell note, e.g. "NA"
 
-  timeLogs  TimeLog[]
-  reworks   StageRework[]
-  tests     JobTest[]
-  planItems PlanItem[]
+  timeLogs    TimeLog[]
+  reworks     StageRework[]
+  tests       JobTest[]
+  planItems   PlanItem[]
+  planWorkers StagePlanWorker[]
 
   @@index([jobId])
+}
+
+// Labour planning on the road map: who is supposed to work on this activity.
+model StagePlanWorker {
+  id         String   @id @default(cuid())
+  stageId    String
+  stage      Stage    @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([stageId, employeeId])
+  @@index([employeeId])
 }
 
 // Testing requirement on a job (DP / RT / Hydro / Kerosene-Leak / UT / …),
