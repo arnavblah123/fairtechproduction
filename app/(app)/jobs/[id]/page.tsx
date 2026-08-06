@@ -26,7 +26,7 @@ import { ATTACHMENT_KIND_LABELS, formatFileSize } from "@/lib/attachments";
 import { workedByStage, fmtWorked } from "@/lib/idle";
 import { formatMoney } from "@/lib/format";
 import { overheadByJob } from "@/lib/overheads";
-import { getConsumableCosts } from "@/lib/consumables";
+import { getConsumableCostsWithStatus } from "@/lib/consumables";
 import { otOverlapMinutes } from "@/lib/ot";
 import { updateOverheadItem } from "@/lib/actions/overheads";
 
@@ -168,10 +168,11 @@ export default async function JobPage({
   // jobs running each day.
   const overheads = (await overheadByJob([id])).get(id) ?? 0;
   // Consumables issued to this job in the Store app — owner-only figures.
-  const consumables =
-    user.role === "SUPERADMIN"
-      ? (await getConsumableCosts()).get(job.jobNumber) ?? null
-      : null;
+  // When they are missing we say why, rather than silently showing nothing.
+  const consumableData =
+    user.role === "SUPERADMIN" ? await getConsumableCostsWithStatus() : null;
+  const consumables = consumableData?.costs.get(job.jobNumber) ?? null;
+  const consumableProblem = consumableData?.problem ?? null;
   const consumableCost = consumables?.trueCost ?? 0;
   // Running fixed overheads that touch this job's unit — editable in place.
   const overheadItems =
@@ -343,8 +344,10 @@ export default async function JobPage({
               )}
             </dl>
 
-            {/* Labour cost — visible to the owner only */}
-            {(workerCosts.length > 0 || overheads > 0) && (
+            {/* Labour cost — visible to the owner only. Also shown when the
+                only spend so far is consumables, or when the owner needs to
+                be told why the consumable figure is missing. */}
+            {(workerCosts.length > 0 || overheads > 0 || consumableCost > 0 || consumableProblem) && (
               <details className="mt-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm max-w-xl">
                 <summary className="cursor-pointer select-none font-semibold text-emerald-900">
                   💰 Cost so far: {formatMoney(labourCost + overheads + consumableCost)}
@@ -416,6 +419,13 @@ export default async function JobPage({
                       </p>
                     )}
                   </div>
+                )}
+                {/* Why the consumable figure is blank — owner-only, so the
+                    link can be fixed instead of the number just missing. */}
+                {consumableProblem && (
+                  <p className="mt-1.5 pt-1.5 border-t border-emerald-100 text-xs text-amber-700">
+                    Consumables not shown: {consumableProblem}
+                  </p>
                 )}
 
                 {/* Edit the fixed overhead costs right here — changes the
