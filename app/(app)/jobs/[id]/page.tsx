@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, canAccessUnit, isAdmin, lockHrToLabour} from "@/lib/permissions";
-import { setJobStatus, deleteJob, finalDone } from "@/lib/actions/jobs";
+import { setJobStatus, deleteJob, finalDone, setJobWeight } from "@/lib/actions/jobs";
 import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework, setShiftPlan, setStageDue } from "@/lib/actions/stages";
 import { shiftPlanLabel } from "@/lib/shift";
 import { heldItems } from "@/lib/inventory";
@@ -22,6 +22,7 @@ import { QuickAddEmployee } from "@/components/quick-add-employee";
 import { SearchSelect } from "@/components/search-select";
 import { ShiftWorkerRow } from "@/components/shift-worker-row";
 import { JobCalendar } from "@/components/job-calendar";
+import { jobAlerts } from "@/lib/job-alerts";
 import { deleteAttachment } from "@/lib/actions/attachments";
 import { ATTACHMENT_KIND_LABELS, formatFileSize } from "@/lib/attachments";
 import { workedByStage, fmtWorked } from "@/lib/idle";
@@ -188,6 +189,9 @@ export default async function JobPage({
         })
       : [];
 
+  // Delays and pending items on this job — shown before anything else.
+  const alerts = (await jobAlerts([id])).get(id) ?? null;
+
   const openIssues = job.issues.filter((i) => i.status === "OPEN");
   const totalReworks = job.stages.reduce((n, s) => n + s.reworks.length, 0);
   const admin = isAdmin(user);
@@ -343,6 +347,45 @@ export default async function JobPage({
                   <dd>{job.template.name}</dd>
                 </div>
               )}
+              <div>
+                <dt className="text-xs text-slate-400">Finished weight</dt>
+                <dd>
+                  {job.finishedWeightKg ? (
+                    <>
+                      {job.finishedWeightKg.toLocaleString("en-IN")} kg
+                      {admin && (
+                        <form action={setJobWeight} className="inline-flex items-center gap-1 ml-2">
+                          <input type="hidden" name="jobId" value={job.id} />
+                          <input
+                            name="finishedWeightKg"
+                            type="number"
+                            min={1}
+                            step="any"
+                            defaultValue={job.finishedWeightKg}
+                            className="w-20 rounded border border-slate-300 px-1 py-0.5 text-xs"
+                          />
+                          <button className="text-xs text-blue-600">✓</button>
+                        </form>
+                      )}
+                    </>
+                  ) : admin ? (
+                    <form action={setJobWeight} className="flex items-center gap-1">
+                      <input type="hidden" name="jobId" value={job.id} />
+                      <input
+                        name="finishedWeightKg"
+                        type="number"
+                        min={1}
+                        step="any"
+                        placeholder="kg"
+                        className="w-20 rounded border border-slate-300 px-1 py-0.5 text-xs"
+                      />
+                      <button className="text-xs text-blue-600">Set</button>
+                    </form>
+                  ) : (
+                    <span className="text-slate-400">not set</span>
+                  )}
+                </dd>
+              </div>
             </dl>
 
             {/* Labour cost — visible to the owner only. Also shown when the
@@ -395,6 +438,37 @@ export default async function JobPage({
                     <span>Overheads (this job&apos;s share of running costs)</span>
                     <span className="font-medium">{formatMoney(overheads)}</span>
                   </p>
+                )}
+                {/* Per-kg figures — the basis for budgeting the next job */}
+                {job.finishedWeightKg && job.finishedWeightKg > 0 && (
+                  <div className="mt-1.5 pt-1.5 border-t border-emerald-100 text-xs space-y-0.5">
+                    <p className="flex justify-between font-medium">
+                      <span>Per kg ({job.finishedWeightKg.toLocaleString("en-IN")} kg finished)</span>
+                      <span>
+                        {formatMoney(
+                          (labourCost + overheads + consumableCost) / job.finishedWeightKg
+                        )}
+                        /kg
+                      </span>
+                    </p>
+                    <p className="flex justify-between text-emerald-700">
+                      <span className="pl-3">Man-hours per kg</span>
+                      <span>
+                        {(
+                          workerCosts.reduce((s, w) => s + w.minutes, 0) /
+                          60 /
+                          job.finishedWeightKg
+                        ).toFixed(3)}{" "}
+                        h/kg
+                      </span>
+                    </p>
+                    {job.poValue && (
+                      <p className="flex justify-between text-emerald-700">
+                        <span className="pl-3">PO rate</span>
+                        <span>{formatMoney(job.poValue / job.finishedWeightKg)}/kg</span>
+                      </p>
+                    )}
+                  </div>
                 )}
                 {/* Consumables from the Store app — owner-only */}
                 {consumables !== null && consumableCost > 0 && (
@@ -610,185 +684,38 @@ export default async function JobPage({
         </div>
       </div>
 
-      {/* Documents: drawings & bill of material */}
-      <section className="bg-white rounded-xl shadow-sm p-4">
-        <h2 className="font-semibold mb-3">Documents</h2>
-        {job.attachments.length === 0 && (
-          <p className="text-sm text-slate-400 mb-3">
-            No drawings or BOM uploaded yet.
-          </p>
-        )}
-        <ul className="space-y-1.5 mb-4">
-          {job.attachments.map((att) => (
-            <li
-              key={att.id}
-              className="flex flex-wrap items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 text-sm"
-            >
-              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-800 whitespace-nowrap">
-                {ATTACHMENT_KIND_LABELS[att.kind]}
-              </span>
-              <a
-                href={`/api/attachments/${att.id}`}
-                className="font-medium text-blue-700 hover:underline break-all"
+      {/* What needs attention on this job — delays first, then pending */}
+      {alerts && alerts.alerts.length > 0 && (
+        <section
+          className={`rounded-xl shadow-sm p-4 text-white ${
+            alerts.lateCount > 0 ? "bg-red-600" : "bg-amber-500"
+          }`}
+        >
+          <h2 className="font-semibold">
+            {alerts.lateCount > 0
+              ? `🔴 ${alerts.lateCount} delay${alerts.lateCount === 1 ? "" : "s"} on this job`
+              : "📋 Pending on this job"}
+            {alerts.lateCount > 0 && alerts.todoCount > 0 && (
+              <span className="font-normal"> · {alerts.todoCount} pending</span>
+            )}
+          </h2>
+          <ul className="mt-2 space-y-1 text-sm">
+            {alerts.alerts.map((a, i) => (
+              <li
+                key={i}
+                className={`rounded-lg px-3 py-1.5 ${
+                  a.severity === "late" ? "bg-white/15" : "bg-white/10"
+                }`}
               >
-                {att.filename}
-              </a>
-              <span className="text-xs text-slate-400">
-                {formatFileSize(att.size)} · {att.uploadedBy.name} ·{" "}
-                {formatDateTime(att.createdAt)}
-              </span>
-              {admin && (
-                <form action={deleteAttachment} className="ml-auto">
-                  <input type="hidden" name="attachmentId" value={att.id} />
-                  <button className="text-xs text-red-600 hover:underline">
-                    Delete
-                  </button>
-                </form>
-              )}
-            </li>
-          ))}
-        </ul>
-        {admin && <AttachmentUpload jobId={job.id} />}
-      </section>
-
-      {/* Testing requirements */}
-      <section className="bg-white rounded-xl shadow-sm p-4">
-        <h2 className="font-semibold mb-3">Testing</h2>
-        {job.tests.length === 0 && (
-          <p className="text-sm text-slate-400 mb-3">No tests recorded for this job.</p>
-        )}
-        <ul className="space-y-1.5 mb-4">
-          {job.tests.map((test) => (
-            <li
-              key={test.id}
-              className="flex flex-wrap items-center gap-2 bg-sky-50 rounded-lg px-3 py-2 text-sm"
-            >
-              <span className="font-medium text-sky-900">🧪 {test.name}</span>
-              <span className="text-xs text-slate-500">
-                {test.stage ? `stage ${test.stage.sequence} on the board` : "final / whole job"}
-              </span>
-              {admin && (
-                <form action={deleteJobTest} className="ml-auto">
-                  <input type="hidden" name="testId" value={test.id} />
-                  <button className="text-xs text-red-600 hover:underline">Remove</button>
-                </form>
-              )}
-            </li>
-          ))}
-        </ul>
-        {job.status !== "COMPLETED" && (
-          <form action={addJobTest} className="flex flex-wrap gap-2 items-center">
-            <input type="hidden" name="jobId" value={job.id} />
-            <input
-              name="name"
-              required
-              list="test-types"
-              placeholder="Add test…"
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm w-44"
-            />
-            <datalist id="test-types">
-              <option value="DP Test" />
-              <option value="RT Test" />
-              <option value="Hydro Test" />
-              <option value="Kerosene / Leak Test" />
-              <option value="UT Test" />
-              <option value="Dimension Inspection" />
-              <option value="Final Painting Inspection" />
-              <option value="Final Inspection" />
-            </datalist>
-            <select name="stageId" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
-              <option value="">Final (whole job)</option>
-              {job.stages.map((s) => (
-                <option key={s.id} value={s.id}>
-                  after {s.sequence}. {s.name}
-                </option>
-              ))}
-            </select>
-            <button className={`${btn} bg-sky-600 text-white hover:bg-sky-700`}>
-              + Add test
-            </button>
-          </form>
-        )}
-      </section>
-
-      {/* Issues */}
-      <section className="bg-white rounded-xl shadow-sm p-4">
-        <h2 className="font-semibold mb-3">Issues</h2>
-        {openIssues.length === 0 && (
-          <p className="text-sm text-slate-400 mb-3">No open issues.</p>
-        )}
-        <ul className="space-y-2 mb-4">
-          {job.issues.map((issue) => (
-            <li
-              key={issue.id}
-              className={`rounded-lg px-3 py-2 text-sm flex flex-wrap items-center justify-between gap-2 ${
-                issue.status === "OPEN" ? "bg-red-50" : "bg-slate-50 text-slate-500"
-              }`}
-            >
-              <div>
-                <IssueBadge type={issue.type} />
-                <span className="ml-2">{issue.description}</span>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Raised by {issue.raisedBy.name} · {formatDateTime(issue.createdAt)}
-                  {issue.dueAt && (
-                    <span
-                      className={
-                        issue.status === "OPEN" && issue.dueAt.getTime() < Date.now()
-                          ? " text-red-600 font-medium"
-                          : ""
-                      }
-                    >
-                      {" "}· resolve by {formatDate(issue.dueAt)}
-                    </span>
-                  )}
-                  {issue.status === "RESOLVED" &&
-                    ` · Resolved by ${issue.resolvedBy?.name ?? "—"}`}
-                </p>
-              </div>
-              {issue.status === "OPEN" && (
-                <form action={resolveIssue}>
-                  <input type="hidden" name="issueId" value={issue.id} />
-                  <button className={`${btn} bg-green-100 text-green-800 hover:bg-green-200`}>
-                    Resolve
-                  </button>
-                </form>
-              )}
-            </li>
-          ))}
-        </ul>
-        {/* One-tap raise issue */}
-        <form action={raiseIssue} className="flex flex-wrap gap-2 items-center">
-          <input type="hidden" name="jobId" value={job.id} />
-          <select name="type" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
-            <option value="MATERIAL_SHORTAGE">Material Shortage</option>
-            <option value="LABOUR_SHORTAGE">Labour Shortage</option>
-            <option value="OTHER">Other</option>
-          </select>
-          <input
-            name="description"
-            required
-            placeholder="What's the problem?"
-            className="flex-1 min-w-40 rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
-          />
-          <label className="flex items-center gap-1.5 text-sm">
-            <span className="text-slate-500 whitespace-nowrap">Resolve by</span>
-            <input
-              name="dueAt"
-              type="date"
-              required
-              defaultValue={istDateInput(1)}
-              className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
-              style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
-            />
-          </label>
-          <button className={`${btn} bg-red-600 text-white hover:bg-red-700`}>
-            🚩 Raise Issue
-          </button>
-        </form>
-        <p className="text-xs text-slate-400 mt-1.5">
-          Raising an issue sends a WhatsApp to Jagdish and the owner straight away.
-        </p>
-      </section>
+                {a.text}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs opacity-90">
+            Planning targets, promised dates, open issues and missing paperwork for this job.
+          </p>
+        </section>
+      )}
 
       {/* Stage board */}
       <section>
@@ -1214,6 +1141,186 @@ export default async function JobPage({
           basePath={`/jobs/${job.id}`}
           extraParams={{}}
         />
+      </section>
+
+      {/* Documents: drawings & bill of material */}
+      <section className="bg-white rounded-xl shadow-sm p-4">
+        <h2 className="font-semibold mb-3">Documents</h2>
+        {job.attachments.length === 0 && (
+          <p className="text-sm text-slate-400 mb-3">
+            No drawings or BOM uploaded yet.
+          </p>
+        )}
+        <ul className="space-y-1.5 mb-4">
+          {job.attachments.map((att) => (
+            <li
+              key={att.id}
+              className="flex flex-wrap items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 text-sm"
+            >
+              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-800 whitespace-nowrap">
+                {ATTACHMENT_KIND_LABELS[att.kind]}
+              </span>
+              <a
+                href={`/api/attachments/${att.id}`}
+                className="font-medium text-blue-700 hover:underline break-all"
+              >
+                {att.filename}
+              </a>
+              <span className="text-xs text-slate-400">
+                {formatFileSize(att.size)} · {att.uploadedBy.name} ·{" "}
+                {formatDateTime(att.createdAt)}
+              </span>
+              {admin && (
+                <form action={deleteAttachment} className="ml-auto">
+                  <input type="hidden" name="attachmentId" value={att.id} />
+                  <button className="text-xs text-red-600 hover:underline">
+                    Delete
+                  </button>
+                </form>
+              )}
+            </li>
+          ))}
+        </ul>
+        {admin && <AttachmentUpload jobId={job.id} />}
+      </section>
+
+      {/* Testing requirements */}
+      <section className="bg-white rounded-xl shadow-sm p-4">
+        <h2 className="font-semibold mb-3">Testing</h2>
+        {job.tests.length === 0 && (
+          <p className="text-sm text-slate-400 mb-3">No tests recorded for this job.</p>
+        )}
+        <ul className="space-y-1.5 mb-4">
+          {job.tests.map((test) => (
+            <li
+              key={test.id}
+              className="flex flex-wrap items-center gap-2 bg-sky-50 rounded-lg px-3 py-2 text-sm"
+            >
+              <span className="font-medium text-sky-900">🧪 {test.name}</span>
+              <span className="text-xs text-slate-500">
+                {test.stage ? `stage ${test.stage.sequence} on the board` : "final / whole job"}
+              </span>
+              {admin && (
+                <form action={deleteJobTest} className="ml-auto">
+                  <input type="hidden" name="testId" value={test.id} />
+                  <button className="text-xs text-red-600 hover:underline">Remove</button>
+                </form>
+              )}
+            </li>
+          ))}
+        </ul>
+        {job.status !== "COMPLETED" && (
+          <form action={addJobTest} className="flex flex-wrap gap-2 items-center">
+            <input type="hidden" name="jobId" value={job.id} />
+            <input
+              name="name"
+              required
+              list="test-types"
+              placeholder="Add test…"
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm w-44"
+            />
+            <datalist id="test-types">
+              <option value="DP Test" />
+              <option value="RT Test" />
+              <option value="Hydro Test" />
+              <option value="Kerosene / Leak Test" />
+              <option value="UT Test" />
+              <option value="Dimension Inspection" />
+              <option value="Final Painting Inspection" />
+              <option value="Final Inspection" />
+            </datalist>
+            <select name="stageId" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
+              <option value="">Final (whole job)</option>
+              {job.stages.map((s) => (
+                <option key={s.id} value={s.id}>
+                  after {s.sequence}. {s.name}
+                </option>
+              ))}
+            </select>
+            <button className={`${btn} bg-sky-600 text-white hover:bg-sky-700`}>
+              + Add test
+            </button>
+          </form>
+        )}
+      </section>
+
+      {/* Issues */}
+      <section className="bg-white rounded-xl shadow-sm p-4">
+        <h2 className="font-semibold mb-3">Issues</h2>
+        {openIssues.length === 0 && (
+          <p className="text-sm text-slate-400 mb-3">No open issues.</p>
+        )}
+        <ul className="space-y-2 mb-4">
+          {job.issues.map((issue) => (
+            <li
+              key={issue.id}
+              className={`rounded-lg px-3 py-2 text-sm flex flex-wrap items-center justify-between gap-2 ${
+                issue.status === "OPEN" ? "bg-red-50" : "bg-slate-50 text-slate-500"
+              }`}
+            >
+              <div>
+                <IssueBadge type={issue.type} />
+                <span className="ml-2">{issue.description}</span>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Raised by {issue.raisedBy.name} · {formatDateTime(issue.createdAt)}
+                  {issue.dueAt && (
+                    <span
+                      className={
+                        issue.status === "OPEN" && issue.dueAt.getTime() < Date.now()
+                          ? " text-red-600 font-medium"
+                          : ""
+                      }
+                    >
+                      {" "}· resolve by {formatDate(issue.dueAt)}
+                    </span>
+                  )}
+                  {issue.status === "RESOLVED" &&
+                    ` · Resolved by ${issue.resolvedBy?.name ?? "—"}`}
+                </p>
+              </div>
+              {issue.status === "OPEN" && (
+                <form action={resolveIssue}>
+                  <input type="hidden" name="issueId" value={issue.id} />
+                  <button className={`${btn} bg-green-100 text-green-800 hover:bg-green-200`}>
+                    Resolve
+                  </button>
+                </form>
+              )}
+            </li>
+          ))}
+        </ul>
+        {/* One-tap raise issue */}
+        <form action={raiseIssue} className="flex flex-wrap gap-2 items-center">
+          <input type="hidden" name="jobId" value={job.id} />
+          <select name="type" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
+            <option value="MATERIAL_SHORTAGE">Material Shortage</option>
+            <option value="LABOUR_SHORTAGE">Labour Shortage</option>
+            <option value="OTHER">Other</option>
+          </select>
+          <input
+            name="description"
+            required
+            placeholder="What's the problem?"
+            className="flex-1 min-w-40 rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+          />
+          <label className="flex items-center gap-1.5 text-sm">
+            <span className="text-slate-500 whitespace-nowrap">Resolve by</span>
+            <input
+              name="dueAt"
+              type="date"
+              required
+              defaultValue={istDateInput(1)}
+              className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+            />
+          </label>
+          <button className={`${btn} bg-red-600 text-white hover:bg-red-700`}>
+            🚩 Raise Issue
+          </button>
+        </form>
+        <p className="text-xs text-slate-400 mt-1.5">
+          Raising an issue sends a WhatsApp to Jagdish and the owner straight away.
+        </p>
       </section>
 
       {/* Time log */}

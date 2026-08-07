@@ -36,6 +36,9 @@ export async function createJob(
   const materialReady = String(formData.get("materialReady") ?? "yes") !== "no";
   const materialNote = String(formData.get("materialNote") ?? "").trim();
   const materialNeededByRaw = String(formData.get("materialNeededBy") ?? "");
+  // Finished weight in kg — the basis for per-kg budgets.
+  const weightRaw = String(formData.get("finishedWeightKg") ?? "").trim();
+  const finishedWeightKg = weightRaw ? Number(weightRaw) : null;
 
   if (!clientName || !description || !unitId) {
     return { error: "Client name, description and unit are required." };
@@ -48,6 +51,9 @@ export async function createJob(
   }
   if (!expectedCompletionRaw) {
     return { error: "Expected completion date is mandatory." };
+  }
+  if (finishedWeightKg !== null && (!isFinite(finishedWeightKg) || finishedWeightKg <= 0)) {
+    return { error: "Finished weight must be a number greater than 0." };
   }
   try {
     assertUnitAccess(user, unitId);
@@ -162,6 +168,7 @@ export async function createJob(
         reminderDaysBefore: isNaN(reminderDaysBefore) ? 7 : reminderDaysBefore,
         priority,
         materialReady,
+        finishedWeightKg,
         templateId: usedTemplateId,
         createdById: user.id,
         stages: {
@@ -323,6 +330,21 @@ export async function dispatchJob(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobId}`);
+}
+
+// Finished weight, editable after creation — older jobs have none yet and
+// the weight is often confirmed only once the job is built.
+export async function setJobWeight(formData: FormData) {
+  const user = await requireUser();
+  const jobId = String(formData.get("jobId") ?? "");
+  const raw = String(formData.get("finishedWeightKg") ?? "").trim();
+  const kg = raw ? Number(raw) : null;
+  if (kg !== null && (!isFinite(kg) || kg <= 0)) return;
+  const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
+  assertUnitAccess(user, job.unitId);
+  await db.job.update({ where: { id: jobId }, data: { finishedWeightKg: kg } });
+  await audit(user.id, "job.setWeight", "Job", jobId, { finishedWeightKg: kg });
   revalidatePath(`/jobs/${jobId}`);
 }
 

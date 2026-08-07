@@ -191,6 +191,20 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
           <input name="expectedCompletion" type="date" required className={inputCls} />
         </div>
         <div>
+          <label className={labelCls}>Finished weight (kg)</label>
+          <input
+            name="finishedWeightKg"
+            type="number"
+            min={1}
+            step="any"
+            placeholder="e.g. 4500"
+            className={inputCls}
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            Weight of the finished job — used to budget cost, hours and material per kg.
+          </p>
+        </div>
+        <div>
           <label className={labelCls}>Remind how many days before?</label>
           <input
             name="reminderDaysBefore"

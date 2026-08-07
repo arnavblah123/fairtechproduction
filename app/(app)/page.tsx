@@ -19,6 +19,7 @@ import { punchInDay } from "@/lib/actions/punch";
 import { istToday } from "@/lib/overheads";
 import { buildTodoData } from "@/lib/todo";
 import { buildOffList } from "@/lib/attendance-off";
+import { jobAlerts } from "@/lib/job-alerts";
 import { toggleLeaveToday } from "@/lib/actions/employees";
 import type { JobStatus } from "@prisma/client";
 
@@ -91,6 +92,9 @@ export default async function DashboardPage({
     },
     orderBy: [{ priority: "desc" }, { expectedCompletion: "asc" }],
   });
+
+  // What's wrong on each job — the red strip on its card.
+  const alertsByJob = await jobAlerts(jobs.map((j) => j.id));
 
   // Workers currently on general duties, plus running outside-crane clocks.
   const [dutyLogs, craneLogs, unitWorkers] = await Promise.all([
@@ -337,12 +341,45 @@ export default async function DashboardPage({
                     const activeStage = job.stages.find(
                       (s) => s.status === "ACTIVE" || s.status === "REWORK"
                     );
+                    const jobIssues = alertsByJob.get(job.id);
                     return (
                       <Link
                         key={job.id}
                         href={`/jobs/${job.id}`}
                         className="block px-4 py-3 hover:bg-slate-50"
                       >
+                        {/* What's wrong on this job — worst first */}
+                        {jobIssues && jobIssues.alerts.length > 0 && (
+                          <div
+                            className={`-mx-1 mb-2 rounded-lg px-3 py-2 text-white ${
+                              jobIssues.lateCount > 0 ? "bg-red-600" : "bg-amber-500"
+                            }`}
+                          >
+                            <p className="text-sm font-semibold">
+                              {jobIssues.lateCount > 0
+                                ? `🔴 ${jobIssues.lateCount} delay${jobIssues.lateCount === 1 ? "" : "s"}`
+                                : "📋 pending"}
+                              {jobIssues.todoCount > 0 && jobIssues.lateCount > 0 && (
+                                <span className="font-normal">
+                                  {" "}· {jobIssues.todoCount} pending
+                                </span>
+                              )}
+                              <span className="font-normal"> — open the job →</span>
+                            </p>
+                            <ul className="mt-0.5 space-y-0.5 text-xs">
+                              {jobIssues.alerts.slice(0, 2).map((a, i) => (
+                                <li key={i} className="truncate">
+                                  {a.text}
+                                </li>
+                              ))}
+                              {jobIssues.alerts.length > 2 && (
+                                <li className="opacity-80">
+                                  +{jobIssues.alerts.length - 2} more
+                                </li>
+                              )}
+                            </ul>
+                          </div>
+                        )}
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <p className="font-medium">
@@ -355,9 +392,6 @@ export default async function DashboardPage({
                           </div>
                           <div className="flex flex-col items-end gap-1">
                             <JobStatusBadge status={job.status} />
-                            <span className="text-[11px] text-blue-600">
-                              📅 timesheet &amp; plan
-                            </span>
                             {job.priority && <PriorityBadge />}
                             {job.issues.length > 0 && (
                               <IssueBadge count={job.issues.length} />
