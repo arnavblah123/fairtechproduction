@@ -790,18 +790,6 @@ export default async function JobPage({
         </p>
       </section>
 
-      {/* Timesheet calendar: stage-wise hours per day, plan targets overlaid */}
-      <section className="bg-white rounded-xl shadow-sm p-4" id="calendar">
-        <h2 className="font-semibold mb-3">📅 Timesheet calendar</h2>
-        <JobCalendar
-          jobId={job.id}
-          month={m}
-          stageId={stageParam}
-          basePath={`/jobs/${job.id}`}
-          extraParams={{}}
-        />
-      </section>
-
       {/* Stage board */}
       <section>
         <h2 className="font-semibold mb-2 px-1">Stage Board</h2>
@@ -1214,6 +1202,18 @@ export default async function JobPage({
             </form>
           )}
         </div>
+      </section>
+
+      {/* Timesheet calendar: stage-wise hours per day, plan targets overlaid */}
+      <section className="bg-white rounded-xl shadow-sm p-4" id="calendar">
+        <h2 className="font-semibold mb-3">📅 Timesheet calendar</h2>
+        <JobCalendar
+          jobId={job.id}
+          month={m}
+          stageId={stageParam}
+          basePath={`/jobs/${job.id}`}
+          extraParams={{}}
+        />
       </section>
 
       {/* Time log */}
