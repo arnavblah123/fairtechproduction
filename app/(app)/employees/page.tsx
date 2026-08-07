@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { requireUser, isAdmin, lockHrToLabour} from "@/lib/permissions";
 import { transferEmployee, setEmployeeActive, setBiometricId, setEmployeeWage, setEmployeeEsiPf } from "@/lib/actions/employees";
 import { QuickAddEmployee } from "@/components/quick-add-employee";
+import { SearchSelect } from "@/components/search-select";
+import { recordLongLeave, cancelLongLeave } from "@/lib/actions/leave";
 import { DisciplineForm } from "@/components/discipline-form";
 import { LiveDuration } from "@/components/live-duration";
 import { formatDate, jobCode, ACTIVITY_LABELS } from "@/lib/format";
@@ -57,12 +59,108 @@ export default async function EmployeesPage({
     orderBy: { name: "asc" },
   });
 
+  // Long holidays running now or still to come.
+  const today = new Date(new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
+  const leaves = await db.leavePeriod.findMany({
+    where: { toDate: { gte: today }, employee: { primaryUnitId: { in: unitIds } } },
+    include: {
+      employee: { select: { id: true, name: true, code: true, primaryUnit: { select: { code: true } } } },
+      markedBy: { select: { name: true } },
+    },
+    orderBy: { fromDate: "asc" },
+  });
+
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold">Employees</h1>
 
       {/* 30-second quick add */}
       <QuickAddEmployee units={units.map((u) => ({ id: u.id, name: u.name }))} />
+
+      {/* Long holiday: worker asks, supervisor records it here */}
+      <section className="bg-white rounded-xl shadow-sm p-4 space-y-2" id="leave">
+        <h2 className="font-semibold">🏖 Long holiday</h2>
+        <p className="text-xs text-slate-500">
+          Record it the day the worker asks. He drops off the daily off-list for those dates, the
+          labour app shows him away, and Jagdish gets a WhatsApp straight away.
+        </p>
+        <form action={recordLongLeave} className="flex flex-wrap items-end gap-2 text-sm">
+          <div className="min-w-52 flex-1">
+            <span className="block text-xs text-slate-500 mb-0.5">Worker *</span>
+            <SearchSelect
+              name="employeeId"
+              required
+              options={employees.map((e) => ({
+                value: e.id,
+                label: `${e.name} (${e.code} · ${e.skill} · ${e.primaryUnit.code})`,
+              }))}
+            />
+          </div>
+          <label>
+            <span className="block text-xs text-slate-500 mb-0.5">From *</span>
+            <input
+              type="date"
+              name="fromDate"
+              required
+              className="rounded-lg border border-slate-300 px-2 py-1.5"
+              style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+            />
+          </label>
+          <label>
+            <span className="block text-xs text-slate-500 mb-0.5">To *</span>
+            <input
+              type="date"
+              name="toDate"
+              required
+              className="rounded-lg border border-slate-300 px-2 py-1.5"
+              style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+            />
+          </label>
+          <input
+            name="reason"
+            required
+            placeholder="Reason (village, wedding, medical…) *"
+            className="flex-1 min-w-40 rounded-lg border border-slate-300 px-3 py-1.5"
+          />
+          <button className="rounded-lg bg-teal-600 text-white px-4 py-1.5 font-medium">
+            Record leave
+          </button>
+        </form>
+
+        {leaves.length > 0 && (
+          <div className="pt-2 space-y-1">
+            {leaves.map((l) => {
+              const running = l.fromDate <= today && l.toDate >= today;
+              const days =
+                Math.round((l.toDate.getTime() - l.fromDate.getTime()) / 86400000) + 1;
+              return (
+                <div
+                  key={l.id}
+                  className={`flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-sm ${
+                    running ? "bg-teal-50 border border-teal-200" : "bg-slate-50"
+                  }`}
+                >
+                  <span>
+                    <b>{l.employee.name}</b>{" "}
+                    <span className="text-xs text-slate-400">
+                      {l.employee.code} · {l.employee.primaryUnit.code}
+                    </span>{" "}
+                    — {formatDate(l.fromDate)} → {formatDate(l.toDate)}{" "}
+                    <span className="text-xs text-slate-500">
+                      ({days} day{days === 1 ? "" : "s"}) · {l.reason}
+                      {running ? " · away now" : " · upcoming"}
+                    </span>
+                  </span>
+                  <form action={cancelLongLeave}>
+                    <input type="hidden" name="periodId" value={l.id} />
+                    <button className="text-xs text-red-600 hover:underline">Cancel</button>
+                  </form>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <form className="flex flex-wrap gap-2 bg-white rounded-xl shadow-sm p-3 text-sm items-center">
         <select name="unit" defaultValue={unitFilter ?? ""} className="rounded-lg border border-slate-300 px-2 py-1.5">

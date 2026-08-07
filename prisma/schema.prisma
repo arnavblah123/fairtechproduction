@@ -43,6 +43,7 @@ model User {
   reworks        StageRework[]   @relation("ReworkRaisedBy")
   disciplines    Discipline[]    @relation("DisciplineRaisedBy")
   complaintsRaised LabourComplaint[] @relation("ComplaintRaisedBy")
+  leavesMarked     LeavePeriod[]     @relation("LeaveMarkedBy")
   cranesStarted  CraneLog[]      @relation("CraneStartedBy")
   cranesEnded    CraneLog[]      @relation("CraneEndedBy")
   plansCreated   Plan[]          @relation("PlanCreatedBy")
@@ -172,6 +173,7 @@ model Employee {
   leaveDays   LeaveDay[]
   planWorkers StagePlanWorker[]
   complaints  LabourComplaint[]
+  leavePeriods LeavePeriod[]
 }
 
 // Why a worker isn't in today. Asked on the dashboard the moment someone
@@ -183,6 +185,23 @@ enum AbsenceReason {
   NIGHT_SHIFT_REST // worked the night, resting today
   NOT_PICKING_UP // phone not answered
   OTHER
+}
+
+// A long holiday asked for by a worker and recorded by the supervisor.
+// Expands into LeaveDay rows for every date in the range, so the daily
+// off-list and the labour feed already know he is away.
+model LeavePeriod {
+  id          String   @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  fromDate    DateTime @db.Date
+  toDate      DateTime @db.Date
+  reason      String
+  markedById  String
+  markedBy    User     @relation("LeaveMarkedBy", fields: [markedById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([employeeId, fromDate])
 }
 
 model LeaveDay {

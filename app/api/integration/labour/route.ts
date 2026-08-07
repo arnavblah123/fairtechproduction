@@ -94,6 +94,26 @@ export async function GET(req: NextRequest) {
   for (const l of logins) presentToday.add(l.employeeCode);
   for (const l of logs) presentToday.add(l.employee.code);
 
+  // Long holidays: who is away, and until when. The calling app needs this so
+  // a man on leave in his village isn't rung or counted absent.
+  const istToday = new Date(
+    Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate())
+  );
+  const leavePeriods = await prisma.leavePeriod.findMany({
+    where: { toDate: { gte: istToday } },
+    include: { employee: { select: { code: true, name: true } } },
+    orderBy: { fromDate: "asc" },
+  });
+  const onLeave = leavePeriods.map((l) => ({
+    code: l.employee.code,
+    name: l.employee.name,
+    from: l.fromDate.toISOString().slice(0, 10),
+    to: l.toDate.toISOString().slice(0, 10),
+    reason: l.reason,
+    awayNow: l.fromDate <= istToday && l.toDate >= istToday,
+  }));
+  const awayTodayCodes = new Set(onLeave.filter((l) => l.awayNow).map((l) => l.code));
+
   return NextResponse.json(
     {
       exportedAt: new Date().toISOString(),
@@ -109,9 +129,11 @@ export async function GET(req: NextRequest) {
           unitCode: current.code,
           unitName: current.name,
           joinedAt: e.createdAt.toISOString().slice(0, 10),
+          onLeaveToday: awayTodayCodes.has(e.code),
         };
       }),
       presentToday: [...presentToday],
+      onLeave,
     },
     { headers: corsHeaders(req) }
   );
