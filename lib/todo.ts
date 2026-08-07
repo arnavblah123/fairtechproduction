@@ -111,64 +111,6 @@ export async function buildTodoData(user: SessionUser) {
     }
   }
 
-  // Today's road-map labour plan: who is supposed to be on which activity.
-  // Not counted in the to-do total — it's the morning's work order, not a
-  // chore to tick off.
-  const t0 = istToday();
-  const roadmapToday = await db.stagePlanWorker.findMany({
-    where: {
-      stage: {
-        plannedStart: { lte: t0 },
-        plannedEnd: { gte: t0 },
-        status: { not: "DONE" },
-        job: { status: { notIn: ["COMPLETED"] }, ...jobScope },
-      },
-    },
-    include: {
-      employee: { select: { id: true, name: true, skill: true } },
-      stage: {
-        select: {
-          id: true,
-          name: true,
-          sequence: true,
-          status: true,
-          job: { select: { id: true, jobNumber: true, description: true } },
-        },
-      },
-    },
-  });
-  // Group by activity so a supervisor reads "this stage → these people".
-  const roadmapByStage = new Map<
-    string,
-    {
-      stageName: string;
-      sequence: number;
-      started: boolean;
-      jobId: string;
-      jobNumber: number;
-      jobDescription: string;
-      workers: { id: string; name: string; skill: string }[];
-    }
-  >();
-  for (const a of roadmapToday) {
-    const row =
-      roadmapByStage.get(a.stageId) ??
-      {
-        stageName: a.stage.name,
-        sequence: a.stage.sequence,
-        started: a.stage.status === "ACTIVE",
-        jobId: a.stage.job.id,
-        jobNumber: a.stage.job.jobNumber,
-        jobDescription: a.stage.job.description,
-        workers: [],
-      };
-    row.workers.push(a.employee);
-    roadmapByStage.set(a.stageId, row);
-  }
-  const roadmapPlan = [...roadmapByStage.values()].sort(
-    (a, b) => a.jobNumber - b.jobNumber || a.sequence - b.sequence
-  );
-
   const total =
     lateNoReason.length +
     overnight.length +
@@ -187,7 +129,6 @@ export async function buildTodoData(user: SessionUser) {
     inspectionTests,
     ownerTodos,
     copySourceByName,
-    roadmapPlan,
     total,
   };
 }

@@ -398,10 +398,10 @@ export default async function PlanningPage() {
         <h1 className="text-xl font-bold">Production Planning</h1>
         <div className="flex items-center gap-3">
           <Link
-            href="/roadmap"
+            href="/calendar"
             className="rounded-lg bg-slate-900 text-white px-3 py-1.5 text-sm font-medium"
           >
-            🗺️ Road Map
+            📅 Work Calendar
           </Link>
           {!owner && (
             <span className="text-xs text-slate-500">
