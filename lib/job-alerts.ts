@@ -45,6 +45,9 @@ export async function jobAlerts(jobIds: string[]): Promise<Map<string, JobAlerts
         estimatedDispatchAt: true,
         poNumber: true,
         poValue: true,
+        poAwaited: true,
+        poAwaitedAt: true,
+        poExpectedBy: true,
         attachments: { where: { kind: "DRAWING" }, select: { id: true }, take: 1 },
         stages: {
           select: { id: true, name: true, sequence: true, status: true, dueAt: true },
@@ -163,7 +166,26 @@ export async function jobAlerts(jobIds: string[]): Promise<Map<string, JobAlerts
     // 6. Paperwork the morning list chases
     if (!done) {
       if (!job.poNumber?.trim() || !job.poValue) {
-        alerts.push({ severity: "todo", days: 0, text: "PO number and value not entered" });
+        if (!job.poAwaited) {
+          alerts.push({ severity: "todo", days: 0, text: "PO number and value not entered" });
+        } else {
+          // Marked "not received yet" — quiet until the promised date passes.
+          const overdueBy = job.poExpectedBy ? dayDiff(now, job.poExpectedBy) : 0;
+          const waitingDays = job.poAwaitedAt ? dayDiff(now, job.poAwaitedAt) : 0;
+          if (overdueBy > 0) {
+            alerts.push({
+              severity: "late",
+              days: overdueBy,
+              text: `PO still not received — customer promised ${formatDate(job.poExpectedBy!)}, ${overdueBy}d over`,
+            });
+          } else if (!job.poExpectedBy && waitingDays > 14) {
+            alerts.push({
+              severity: "late",
+              days: waitingDays,
+              text: `PO still not received after ${waitingDays} days — chase the customer`,
+            });
+          }
+        }
       }
       if (job.attachments.length === 0) {
         alerts.push({ severity: "todo", days: 0, text: "Drawings not uploaded" });

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import type { AbsenceReason } from "@prisma/client";
 import { audit } from "@/lib/audit";
 import { requireUser, isAdmin, assertUnitAccess } from "@/lib/permissions";
 import type { FormState } from "./auth";
@@ -157,17 +158,35 @@ export async function toggleLeaveToday(formData: FormData) {
   const employee = await db.employee.findUniqueOrThrow({ where: { id: employeeId } });
   assertUnitAccess(user, employee.primaryUnitId);
   const { istToday } = await import("@/lib/overheads");
+  const { COMPLAINT_ABSENCES, ABSENCE_LABELS } = await import("@/lib/absence");
   const date = istToday();
+  const rawReason = String(formData.get("reason") ?? "INFORMED_LEAVE");
+  const reason = (ABSENCE_LABELS[rawReason] ? rawReason : "INFORMED_LEAVE") as AbsenceReason;
+  const note = String(formData.get("note") ?? "").trim() || null;
   const existing = await db.leaveDay.findUnique({
     where: { employeeId_date: { employeeId, date } },
   });
   if (existing) {
     await db.leaveDay.delete({ where: { id: existing.id } });
   } else {
-    await db.leaveDay.create({ data: { employeeId, date, markedBy: user.name } });
+    await db.leaveDay.create({ data: { employeeId, date, reason, note, markedBy: user.name } });
+    // Not coming without asking, or not answering the phone, goes on the
+    // worker's record — the same complaints list as delays blamed on labour.
+    if (COMPLAINT_ABSENCES.includes(reason)) {
+      await db.labourComplaint.create({
+        data: {
+          employeeId,
+          reason: note ? `${ABSENCE_LABELS[reason]} — ${note}` : ABSENCE_LABELS[reason],
+          raisedById: user.id,
+        },
+      });
+      revalidatePath("/discipline");
+    }
   }
   await audit(user.id, existing ? "employee.leaveUndo" : "employee.leave", "Employee", employeeId, {
     date: date.toISOString().slice(0, 10),
+    reason,
+    note,
   });
   revalidatePath("/");
 }

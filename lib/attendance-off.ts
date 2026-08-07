@@ -14,7 +14,7 @@ const IST_MS = 5.5 * 3600e3;
 
 export type OffList = {
   offByUnit: Map<string, { id: string; name: string; skill: string }[]>;
-  onLeaveByUnit: Map<string, { id: string; name: string; markedBy: string }[]>;
+  onLeaveByUnit: Map<string, { id: string; name: string; markedBy: string; reason: string; note: string | null }[]>;
 };
 
 export async function buildOffList(unitIds: string[]): Promise<OffList> {
@@ -39,7 +39,7 @@ export async function buildOffList(unitIds: string[]): Promise<OffList> {
     }),
     db.leaveDay.findMany({
       where: { date: istToday() },
-      select: { employeeId: true, markedBy: true },
+      select: { employeeId: true, markedBy: true, reason: true, note: true },
     }),
   ]);
 
@@ -62,14 +62,18 @@ export async function buildOffList(unitIds: string[]): Promise<OffList> {
     (l.occurredAt >= t0 ? presentToday : presentYesterday).add(id);
   }
 
-  const leaveById = new Map(leaves.map((l) => [l.employeeId, l.markedBy]));
+  const leaveById = new Map(leaves.map((l) => [l.employeeId, l]));
 
   const offByUnit = new Map<string, { id: string; name: string; skill: string }[]>();
-  const onLeaveByUnit = new Map<string, { id: string; name: string; markedBy: string }[]>();
+  const onLeaveByUnit = new Map<
+    string,
+    { id: string; name: string; markedBy: string; reason: string; note: string | null }[]
+  >();
   for (const e of employees) {
     if (leaveById.has(e.id)) {
       const arr = onLeaveByUnit.get(e.primaryUnitId) ?? [];
-      arr.push({ id: e.id, name: e.name, markedBy: leaveById.get(e.id)! });
+      const l = leaveById.get(e.id)!;
+      arr.push({ id: e.id, name: e.name, markedBy: l.markedBy, reason: l.reason, note: l.note });
       onLeaveByUnit.set(e.primaryUnitId, arr);
       continue;
     }

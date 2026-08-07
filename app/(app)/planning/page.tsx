@@ -6,11 +6,11 @@ import {
   deletePlan,
   deletePlanItem,
   togglePlanItemDone,
-  setPlanItemLateReason,
   addFutureJob,
   deleteFutureJob,
 } from "@/lib/actions/planning";
 import { PlanItemForm } from "@/components/plan-item-form";
+import { LateReasonForm } from "@/components/late-reason-form";
 import { formatDate, formatMoney, jobCode } from "@/lib/format";
 import { workedByStage, fmtWorked } from "@/lib/idle";
 import { overheadByJob } from "@/lib/overheads";
@@ -72,6 +72,15 @@ export default async function PlanningPage() {
     }),
     db.unit.findMany({ orderBy: { name: "asc" } }),
   ]);
+
+  // Workers offered when a delay is blamed on labour.
+  const workerOptions = (
+    await db.employee.findMany({
+      where: { active: true },
+      select: { id: true, name: true, skill: true, primaryUnit: { select: { code: true } } },
+      orderBy: { name: "asc" },
+    })
+  ).map((e) => ({ id: e.id, name: e.name, skill: e.skill, unitCode: e.primaryUnit.code }));
 
   const now = Date.now();
   // IST calendar-day strings for the colour coding — immune to how the
@@ -316,28 +325,9 @@ export default async function PlanningPage() {
                       }
                       if (!isLate) return null;
                       return (
-                        <form
-                          action={setPlanItemLateReason}
-                          className="w-full flex flex-wrap gap-1.5 items-center"
-                        >
-                          <input type="hidden" name="itemId" value={item.id} />
-                          <input
-                            name="reason"
-                            required
-                            placeholder="LATE — state the reason *"
-                            className="flex-1 min-w-32 rounded border border-red-300 bg-white px-2 py-1 text-xs"
-                          />
-                          <input
-                            type="date"
-                            name="revisedDate"
-                            required
-                            title="New expected date *"
-                            className="rounded border border-red-300 bg-white px-2 py-1 text-xs"
-                          />
-                          <button className="rounded bg-red-600 text-white px-2 py-1 text-xs font-medium">
-                            Save
-                          </button>
-                        </form>
+                        <div className="w-full">
+                          <LateReasonForm itemId={item.id} workers={workerOptions} />
+                        </div>
                       );
                     })()}
                     {/* Estimated vs actual: once done, show the difference */}

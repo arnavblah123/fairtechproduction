@@ -59,6 +59,9 @@ export async function buildTodoData(user: SessionUser) {
           clientName: true,
           poNumber: true,
           poValue: true,
+          poAwaited: true,
+          poAwaitedAt: true,
+          poExpectedBy: true,
           attachments: { where: { kind: "DRAWING" }, select: { id: true }, take: 1 },
         },
         orderBy: { jobNumber: "asc" },
@@ -88,9 +91,19 @@ export async function buildTodoData(user: SessionUser) {
     ]);
 
   const missingDrawings = activeJobs.filter((j) => j.attachments.length === 0);
-  const missingPo = activeJobs.filter(
-    (j) => !j.poNumber || !j.poNumber.trim() || !j.poValue
-  );
+  // Jobs without a PO. Ones marked "not received yet" drop off the list
+  // until the promised date passes (or two weeks go by with no date), so a
+  // PO the customer simply hasn't issued stops nagging — but is never lost.
+  const CHASE_AFTER = 14 * DAY;
+  const poStillDue = (j: { poAwaited: boolean; poAwaitedAt: Date | null; poExpectedBy: Date | null }) => {
+    if (!j.poAwaited) return true;
+    if (j.poExpectedBy) return j.poExpectedBy.getTime() < Date.now();
+    return (j.poAwaitedAt?.getTime() ?? 0) + CHASE_AFTER < Date.now();
+  };
+  const noPo = activeJobs.filter((j) => !j.poNumber || !j.poNumber.trim() || !j.poValue);
+  const missingPo = noPo.filter(poStillDue);
+  // Waiting quietly — shown as a note, not counted as a pending chore.
+  const poAwaiting = noPo.filter((j) => !poStillDue(j));
 
   // Reuse suggestion: an earlier job with the same name that has drawings.
   const copySources =
@@ -126,6 +139,7 @@ export async function buildTodoData(user: SessionUser) {
     noDispatchDate,
     missingDrawings,
     missingPo,
+    poAwaiting,
     inspectionTests,
     ownerTodos,
     copySourceByName,

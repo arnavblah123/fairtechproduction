@@ -42,6 +42,7 @@ model User {
   attachments    JobAttachment[] @relation("AttachmentUploadedBy")
   reworks        StageRework[]   @relation("ReworkRaisedBy")
   disciplines    Discipline[]    @relation("DisciplineRaisedBy")
+  complaintsRaised LabourComplaint[] @relation("ComplaintRaisedBy")
   cranesStarted  CraneLog[]      @relation("CraneStartedBy")
   cranesEnded    CraneLog[]      @relation("CraneEndedBy")
   plansCreated   Plan[]          @relation("PlanCreatedBy")
@@ -170,18 +171,29 @@ model Employee {
   disciplines Discipline[]
   leaveDays   LeaveDay[]
   planWorkers StagePlanWorker[]
+  complaints  LabourComplaint[]
 }
 
-// "On leave today" acknowledgment — ticked by a supervisor/owner when a
-// worker's absence is known (leave, holiday, informed). Hides the worker
-// from the daily off-list.
+// Why a worker isn't in today. Asked on the dashboard the moment someone
+// who worked yesterday doesn't show up, so the reason is captured while it
+// is still known. Hides the worker from the daily off-list.
+enum AbsenceReason {
+  INFORMED_LEAVE // asked for leave / known holiday
+  LEAVE_WITHOUT_ASKING // simply did not come
+  NIGHT_SHIFT_REST // worked the night, resting today
+  NOT_PICKING_UP // phone not answered
+  OTHER
+}
+
 model LeaveDay {
-  id         String   @id @default(cuid())
+  id         String        @id @default(cuid())
   employeeId String
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  date       DateTime @db.Date // IST calendar date
+  employee   Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date       DateTime      @db.Date // IST calendar date
+  reason     AbsenceReason @default(INFORMED_LEAVE)
+  note       String?
   markedBy   String // name of who ticked it
-  createdAt  DateTime @default(now())
+  createdAt  DateTime      @default(now())
 
   @@unique([employeeId, date])
 }
@@ -268,6 +280,11 @@ model Job {
   // PO value without GST, entered by the supervisor at Dispatched ✓ —
   // the owner's cost email compares it against the job's total cost.
   poValue Float?
+  // The customer has not issued the PO yet. Stops the daily "add the PO"
+  // reminder, but the job is still chased once the expected date passes.
+  poAwaited     Boolean   @default(false)
+  poAwaitedAt   DateTime? // when it was marked awaited, to age the wait
+  poExpectedBy  DateTime? // when the customer said the PO would come
   // Finished weight of the fabricated job in kg, asked at creation. Drives
   // per-kg budgeting: cost, hours and consumables per kg of steel out.
   finishedWeightKg Float?
@@ -275,6 +292,7 @@ model Job {
   stages      Stage[]
   timeLogs    TimeLog[]
   issues      Issue[]
+  complaints  LabourComplaint[]
   attachments JobAttachment[]
   reworks     StageRework[]
   tests       JobTest[]
@@ -567,6 +585,26 @@ enum DisciplineReason {
   TIMEPASS // 8 hours
   TOBACCO // tobacco / cigarette — 4 hours
   OTHER // custom hours, note required
+}
+
+// A delay blamed on a worker: raised from the late-target form, so "who and
+// why" is captured the moment the supervisor explains the delay. Kept as a
+// complaint record against that worker — no wage cut, unlike Discipline.
+model LabourComplaint {
+  id         String    @id @default(cuid())
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  jobId      String?
+  job        Job?      @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  planItemId String? // the late target this came from
+  stageName  String? // what was delayed, in words
+  reason     String
+  raisedById String
+  raisedBy   User      @relation("ComplaintRaisedBy", fields: [raisedById], references: [id])
+  createdAt  DateTime  @default(now())
+
+  @@index([employeeId, createdAt])
+  @@index([jobId])
 }
 
 model Discipline {

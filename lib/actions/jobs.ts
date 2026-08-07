@@ -299,14 +299,22 @@ export async function dispatchJob(formData: FormData) {
   if (job.status !== "READY_TO_DISPATCH") {
     throw new Error("Only jobs in Ready to Dispatch can be marked dispatched.");
   }
-  if (isNaN(poValue) || poValue <= 0) {
+  const havePo = !isNaN(poValue) && poValue > 0;
+  // The PO value is required — unless the job is marked "PO not received
+  // yet", in which case the goods can still leave and the value is filled in
+  // when the customer finally issues it.
+  if (!havePo && !job.poAwaited) {
     throw new Error("Enter the job's PO value (without GST).");
   }
 
   await db.$transaction(async (tx) => {
     await tx.job.update({
       where: { id: jobId },
-      data: { status: "COMPLETED", completedAt: new Date(), poValue },
+      data: {
+        status: "COMPLETED",
+        completedAt: new Date(),
+        ...(havePo ? { poValue, poAwaited: false, poAwaitedAt: null, poExpectedBy: null } : {}),
+      },
     });
     const open = await tx.timeLog.findMany({ where: { jobId, endedAt: null } });
     for (const log of open) {

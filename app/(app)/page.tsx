@@ -20,6 +20,7 @@ import { istToday } from "@/lib/overheads";
 import { buildTodoData } from "@/lib/todo";
 import { buildOffList } from "@/lib/attendance-off";
 import { jobAlerts } from "@/lib/job-alerts";
+import { ABSENCE_LABELS, COMPLAINT_ABSENCES } from "@/lib/absence";
 import { toggleLeaveToday } from "@/lib/actions/employees";
 import type { JobStatus } from "@prisma/client";
 
@@ -300,24 +301,51 @@ export default async function DashboardPage({
                         <span>
                           {e.name} <span className="text-xs text-slate-400">({e.skill})</span>
                         </span>
-                        <form action={toggleLeaveToday}>
+                        <form action={toggleLeaveToday} className="flex flex-wrap items-center gap-1">
                           <input type="hidden" name="employeeId" value={e.id} />
+                          <select
+                            name="reason"
+                            defaultValue="INFORMED_LEAVE"
+                            className="rounded border border-slate-300 px-1 py-0.5 text-xs"
+                            style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                            title="Why is he not in today?"
+                          >
+                            {Object.entries(ABSENCE_LABELS).map(([k, label]) => (
+                              <option key={k} value={k}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            name="note"
+                            placeholder="note"
+                            className="w-16 rounded border border-slate-300 px-1 py-0.5 text-xs"
+                          />
                           <button
                             className="rounded bg-teal-600 text-white px-2 py-0.5 text-xs"
-                            title="Absence is known (leave/holiday/informed) — removes from this list for today"
+                            title="Record why he is not in today — removes him from this list"
                           >
-                            On leave ✓
+                            ✓
                           </button>
                         </form>
                       </div>
                     ))}
                     {(onLeaveByUnit.get(unit.id) ?? []).length > 0 && (
                       <p className="text-xs text-teal-700">
-                        🏖 On leave today:{" "}
+                        🏖 Not in today:{" "}
                         {(onLeaveByUnit.get(unit.id) ?? []).map((e, i) => (
-                          <span key={e.id}>
+                          <span
+                            key={e.id}
+                            className={
+                              COMPLAINT_ABSENCES.includes(e.reason) ? "text-red-700 font-medium" : ""
+                            }
+                          >
                             {i > 0 && ", "}
                             {e.name}
+                            <span className="font-normal">
+                              {" "}({ABSENCE_LABELS[e.reason] ?? "on leave"}
+                              {e.note ? ` — ${e.note}` : ""})
+                            </span>
                             <form action={toggleLeaveToday} className="inline ml-0.5">
                               <input type="hidden" name="employeeId" value={e.id} />
                               <button className="text-[10px] text-slate-400 hover:text-red-600" title="Undo">
@@ -583,11 +611,13 @@ export default async function DashboardPage({
                               type="number"
                               min={1}
                               step="0.01"
-                              required
+                              required={!job.poAwaited}
                               defaultValue={job.poValue ?? ""}
-                              placeholder="PO value without GST ₹ *"
+                              placeholder={
+                                job.poAwaited ? "PO value ₹ (when it comes)" : "PO value without GST ₹ *"
+                              }
                               className="flex-1 min-w-0 rounded-lg border border-green-300 px-2 py-1.5 text-xs"
-                              title="The job's PO value excluding GST — required to dispatch"
+                              title="The job's PO value excluding GST"
                             />
                             <button
                               className="rounded-lg bg-green-600 text-white px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
@@ -596,6 +626,12 @@ export default async function DashboardPage({
                               Dispatched ✓
                             </button>
                           </form>
+                          {job.poAwaited && (
+                            <p className="text-[11px] text-amber-700">
+                              ⏳ PO not received yet — you can dispatch without the value; add it
+                              on the job once the PO arrives.
+                            </p>
+                          )}
                         </div>
                       );
                     })}

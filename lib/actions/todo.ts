@@ -60,10 +60,39 @@ export async function setJobPoNumber(formData: FormData) {
   if (alreadySet && !isAdmin(user)) {
     throw new Error("PO details are already set — only admins can change them.");
   }
-  await db.job.update({ where: { id: jobId }, data: { poNumber, poValue } });
+  // Entering the PO clears any "not received yet" marker.
+  await db.job.update({
+    where: { id: jobId },
+    data: { poNumber, poValue, poAwaited: false, poAwaitedAt: null, poExpectedBy: null },
+  });
   await audit(user.id, "job.poNumber", "Job", jobId, { poNumber, poValue });
   revalidatePath("/todo");
   revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/");
+}
+
+// "The customer hasn't sent the PO yet." Pauses the daily reminder; the job
+// is chased again once the expected date passes (or after two weeks if no
+// date was given), so nothing is quietly forgotten.
+export async function markPoAwaited(formData: FormData) {
+  const user = await requireUser();
+  const jobId = String(formData.get("jobId") ?? "");
+  const expectedRaw = String(formData.get("poExpectedBy") ?? "").trim();
+  const expected = expectedRaw ? new Date(expectedRaw) : null;
+  const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
+  assertUnitAccess(user, job.unitId);
+  await db.job.update({
+    where: { id: jobId },
+    data: {
+      poAwaited: true,
+      poAwaitedAt: job.poAwaitedAt ?? new Date(),
+      poExpectedBy: expected && !isNaN(expected.getTime()) ? expected : null,
+    },
+  });
+  await audit(user.id, "job.poAwaited", "Job", jobId, { poExpectedBy: expected });
+  revalidatePath("/todo");
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/");
 }
 
 // Planned dispatch date, asked in the morning list — write-once for

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
+import { CAUSE_LABELS } from "@/lib/causes";
 import { requireUser, requireRole, isAdmin, assertUnitAccess } from "@/lib/permissions";
 
 // ---------------------------------------------------------------------------
@@ -117,17 +118,53 @@ export async function setPlanItemLateReason(formData: FormData) {
   }
   const revisedRaw = String(formData.get("revisedDate") ?? "");
   const revisedDate = revisedRaw ? new Date(revisedRaw) : null;
+  // When the delay is blamed on labour, who and why is recorded as a
+  // complaint against that worker — so a pattern shows up over time.
+  const cause = String(formData.get("cause") ?? "").trim();
+  const employeeIds = formData.getAll("employeeIds").map(String).filter(Boolean);
+  const fullReason = cause && cause !== "OTHER" ? `${CAUSE_LABELS[cause] ?? cause}: ${reason}` : reason;
+
   await db.planItem.update({
     where: { id: itemId },
     data: {
-      lateReason: reason,
+      lateReason: fullReason,
       lateReasonBy: user.name,
       lateReasonAt: new Date(),
       ...(revisedDate && !isNaN(revisedDate.getTime()) ? { revisedDate } : {}),
     },
   });
-  await audit(user.id, "plan.lateReason", "PlanItem", itemId, { reason, revisedDate: revisedRaw });
+
+  if (cause === "LABOUR" && employeeIds.length > 0) {
+    const stage = await db.planItem.findUnique({
+      where: { id: itemId },
+      select: { jobId: true, description: true, stage: { select: { name: true, sequence: true } } },
+    });
+    const stageName = stage?.stage
+      ? `${stage.stage.sequence}. ${stage.stage.name}`
+      : stage?.description ?? null;
+    await db.labourComplaint.createMany({
+      data: employeeIds.map((employeeId) => ({
+        employeeId,
+        jobId: stage?.jobId ?? null,
+        planItemId: itemId,
+        stageName,
+        reason,
+        raisedById: user.id,
+      })),
+    });
+    await audit(user.id, "labour.complaint", "PlanItem", itemId, { employeeIds, reason });
+    revalidatePath("/discipline");
+    revalidatePath("/employees");
+  }
+
+  await audit(user.id, "plan.lateReason", "PlanItem", itemId, {
+    reason: fullReason,
+    cause,
+    revisedDate: revisedRaw,
+  });
   revalidatePath("/planning");
+  revalidatePath("/todo");
+  revalidatePath("/");
 }
 
 // Backlog of upcoming work — supervisors and admins can add.
