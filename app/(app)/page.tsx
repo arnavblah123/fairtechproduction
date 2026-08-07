@@ -355,6 +355,9 @@ export default async function DashboardPage({
                           </div>
                           <div className="flex flex-col items-end gap-1">
                             <JobStatusBadge status={job.status} />
+                            <span className="text-[11px] text-blue-600">
+                              📅 timesheet &amp; plan
+                            </span>
                             {job.priority && <PriorityBadge />}
                             {job.issues.length > 0 && (
                               <IssueBadge count={job.issues.length} />

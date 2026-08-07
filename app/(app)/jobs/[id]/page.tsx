@@ -21,6 +21,7 @@ import { AttachmentUpload } from "@/components/attachment-upload";
 import { QuickAddEmployee } from "@/components/quick-add-employee";
 import { SearchSelect } from "@/components/search-select";
 import { ShiftWorkerRow } from "@/components/shift-worker-row";
+import { JobCalendar } from "@/components/job-calendar";
 import { deleteAttachment } from "@/lib/actions/attachments";
 import { ATTACHMENT_KIND_LABELS, formatFileSize } from "@/lib/attachments";
 import { workedByStage, fmtWorked } from "@/lib/idle";
@@ -39,12 +40,12 @@ export default async function JobPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ shift?: string }>;
+  searchParams: Promise<{ shift?: string; m?: string; stage?: string }>;
 }) {
   const user = await requireUser();
   lockHrToLabour(user);
   const { id } = await params;
-  const { shift } = await searchParams;
+  const { shift, m, stage: stageParam } = await searchParams;
 
   const job = await db.job.findUnique({
     where: { id },
@@ -787,6 +788,18 @@ export default async function JobPage({
         <p className="text-xs text-slate-400 mt-1.5">
           Raising an issue sends a WhatsApp to Jagdish and the owner straight away.
         </p>
+      </section>
+
+      {/* Timesheet calendar: stage-wise hours per day, plan targets overlaid */}
+      <section className="bg-white rounded-xl shadow-sm p-4" id="calendar">
+        <h2 className="font-semibold mb-3">📅 Timesheet calendar</h2>
+        <JobCalendar
+          jobId={job.id}
+          month={m}
+          stageId={stageParam}
+          basePath={`/jobs/${job.id}`}
+          extraParams={{}}
+        />
       </section>
 
       {/* Stage board */}
