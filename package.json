@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && prisma migrate deploy && prisma db seed && next build",
+    "build": "prisma generate && prisma migrate deploy && node scripts/verify-schema.mjs && prisma db seed && next build",
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "prisma migrate dev",

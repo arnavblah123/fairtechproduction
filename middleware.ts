@@ -3,6 +3,10 @@ import { verifySessionToken, COOKIE_NAME } from "@/lib/session-token";
 
 const PUBLIC_PATHS = [
   "/login",
+  // Health check must answer even when nobody can log in — it is the only
+  // way to see why the app is failing from a phone. Reports schema and
+  // connection state only, never any data.
+  "/api/health",
   "/api/attendance",
   "/api/cron",
   "/api/feed",

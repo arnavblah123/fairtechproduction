@@ -94,8 +94,12 @@ export default async function DashboardPage({
     orderBy: [{ priority: "desc" }, { expectedCompletion: "asc" }],
   });
 
-  // What's wrong on each job — the red strip on its card.
-  const alertsByJob = await jobAlerts(jobs.map((j) => j.id));
+  // What's wrong on each job — the red strip on its card. Never let this
+  // take the dashboard down: the shop floor needs the board more than the strip.
+  const alertsByJob = await jobAlerts(jobs.map((j) => j.id)).catch((e) => {
+    console.error("job alerts failed:", e);
+    return new Map<string, { alerts: { severity: string; text: string; days: number }[]; lateCount: number; todoCount: number }>();
+  });
 
   // Workers currently on general duties, plus running outside-crane clocks.
   const [dutyLogs, craneLogs, unitWorkers] = await Promise.all([

@@ -190,7 +190,12 @@ export default async function JobPage({
       : [];
 
   // Delays and pending items on this job — shown before anything else.
-  const alerts = (await jobAlerts([id])).get(id) ?? null;
+  const alerts = await jobAlerts([id])
+    .then((m) => m.get(id) ?? null)
+    .catch((e) => {
+      console.error("job alerts failed:", e);
+      return null;
+    });
 
   const openIssues = job.issues.filter((i) => i.status === "OPEN");
   const totalReworks = job.stages.reduce((n, s) => n + s.reworks.length, 0);
