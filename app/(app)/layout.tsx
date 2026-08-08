@@ -98,7 +98,9 @@ export default async function AppLayout({
       </header>
       {/* Bottom padding on phones so content never hides behind the tab bar */}
       <main className="max-w-7xl mx-auto p-4 pb-20 sm:pb-4">{children}</main>
-      {!isHr && !isPurchaseHr && <MobileNav />}
+      {!isHr && !isPurchaseHr && (
+        <MobileNav showAssistant={user.role === "SUPERADMIN"} />
+      )}
     </div>
   );
 }

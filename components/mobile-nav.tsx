@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 // Thumb-friendly bottom tab bar, phones only (hidden sm+). The remaining
 // pages live under /more.
-const tabs = [
+const BASE_TABS = [
   { href: "/", label: "Home", icon: "🏠" },
   { href: "/jobs", label: "Jobs", icon: "🗂️" },
   { href: "/planning", label: "Planning", icon: "🗓️" },
@@ -13,8 +13,17 @@ const tabs = [
   { href: "/more", label: "More", icon: "☰" },
 ];
 
-export function MobileNav() {
+// `showAssistant` is decided on the server from the role — this component is
+// never handed the flag for anyone but the owner, so the tab cannot appear.
+export function MobileNav({ showAssistant = false }: { showAssistant?: boolean }) {
   const pathname = usePathname();
+  const tabs = showAssistant
+    ? [
+        ...BASE_TABS.slice(0, 4),
+        { href: "/assistant", label: "Ask", icon: "🤖" },
+        ...BASE_TABS.slice(4),
+      ]
+    : BASE_TABS;
   return (
     <nav className="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-slate-900 text-slate-300 border-t border-slate-700 pb-[env(safe-area-inset-bottom)]">
       <ul className="flex">

@@ -185,6 +185,24 @@ export default async function DashboardPage({
       {/* Monitoring agent's findings — owner only, decided on the server */}
       {user.role === "SUPERADMIN" && <DailyFindings />}
 
+      {/* Ask-the-factory entry point — owner only. The desktop nav has it too,
+          but that nav is hidden on phones, so it needs to be here. */}
+      {user.role === "SUPERADMIN" && (
+        <Link
+          href="/assistant"
+          className="flex items-center gap-3 rounded-xl bg-white shadow-sm px-4 py-3 hover:bg-slate-50"
+        >
+          <span className="text-2xl">🤖</span>
+          <span className="min-w-0">
+            <span className="block font-semibold">Ask about the factory</span>
+            <span className="block text-sm text-slate-500">
+              Which jobs are late? Who worked on JOB-0021? Answered from live data.
+            </span>
+          </span>
+          <span className="ml-auto text-slate-400">→</span>
+        </Link>
+      )}
+
       {/* Morning reminders banner */}
       {todoTotal > 0 && (
         <Link
