@@ -307,11 +307,15 @@ model Job {
   // Finished weight of the fabricated job in kg, asked at creation. Drives
   // per-kg budgeting: cost, hours and consumables per kg of steel out.
   finishedWeightKg Float?
+  // Set when a supervisor reused a previous job's drawing but said the
+  // drawing may have changed: work must not proceed on the wrong drawing.
+  drawingPending Boolean @default(false)
 
   stages      Stage[]
   timeLogs    TimeLog[]
   issues      Issue[]
   complaints  LabourComplaint[]
+  findings    DailyFinding[]
   attachments JobAttachment[]
   reworks     StageRework[]
   tests       JobTest[]
@@ -331,6 +335,8 @@ enum AttachmentKind {
 }
 
 model JobAttachment {
+  // When this drawing was reused from an earlier job, which one it came from.
+  sourceJobId String?
   id           String         @id @default(cuid())
   jobId        String
   job          Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
@@ -644,6 +650,46 @@ model Discipline {
 }
 
 // ---------- Audit ----------
+
+// Every tool call the assistant or the monitoring agent makes, so there is a
+// record of exactly what the AI looked at.
+model AiToolCall {
+  id        String   @id @default(cuid())
+  /// "chat" or "monitor"
+  source    String
+  runId     String? // groups the calls of one agent run / one chat turn
+  userId    String? // who asked (null for the scheduled agent)
+  toolName  String
+  input     Json
+  ok        Boolean  @default(true)
+  errorText String?
+  ms        Int? // how long the query took
+  createdAt DateTime @default(now())
+
+  @@index([source, createdAt])
+  @@map("ai_tool_calls")
+}
+
+// What the scheduled monitoring agent found, one row per finding.
+model DailyFinding {
+  id         String    @id @default(cuid())
+  runAt      DateTime  @default(now())
+  /// IST calendar day of the run, for grouping
+  day        DateTime  @db.Date
+  /// "high" | "medium" | "low"
+  severity   String    @default("medium")
+  title      String
+  detail     String
+  /// Free-form pointer, e.g. "JOB-0021" or a worker name
+  reference  String?
+  jobId      String?
+  job        Job?      @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  acknowledged Boolean @default(false)
+  createdAt  DateTime  @default(now())
+
+  @@index([day, severity])
+  @@map("daily_findings")
+}
 
 model AuditLog {
   id         String   @id @default(cuid())

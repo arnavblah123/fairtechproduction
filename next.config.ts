@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // The monitoring agent reads its checklist from config/monitor-checklist.md
+  // at runtime; without this the file is not bundled into the serverless
+  // function and the agent would silently fall back to its built-in list.
+  outputFileTracingIncludes: {
+    "/api/cron/daily": ["./config/**"],
+    "/api/cron/agent": ["./config/**"],
+  },
   async redirects() {
     // The labour calling app is served as static files from public/labour;
     // this makes the friendly /labour URL land on its entry point.

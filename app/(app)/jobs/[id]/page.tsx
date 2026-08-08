@@ -17,7 +17,7 @@ import {
 import { LiveDuration } from "@/components/live-duration";
 import { formatDate, formatDateTime, formatDuration, istDateInput, jobCode } from "@/lib/format";
 import { googleCalendarLink, isCalendarConfigured } from "@/lib/google-calendar";
-import { AttachmentUpload } from "@/components/attachment-upload";
+import { DrawingPicker } from "@/components/drawing-picker";
 import { QuickAddEmployee } from "@/components/quick-add-employee";
 import { SearchSelect } from "@/components/search-select";
 import { ShiftWorkerRow } from "@/components/shift-worker-row";
@@ -84,6 +84,7 @@ export default async function JobPage({
           mimeType: true,
           size: true,
           createdAt: true,
+          sourceJobId: true,
           uploadedBy: { select: { name: true } },
         },
       },
@@ -188,6 +189,35 @@ export default async function JobPage({
           orderBy: { name: "asc" },
         })
       : [];
+
+  // Earlier jobs whose drawings can be reused here — same unit first, most
+  // recent first. Only jobs that actually have a drawing.
+  const pastDrawingJobsRaw = await db.job.findMany({
+    where: {
+      id: { not: id },
+      attachments: { some: { kind: "DRAWING" } },
+      ...(user.role === "SUPERADMIN" ? {} : { unitId: { in: user.unitIds } }),
+    },
+    select: {
+      id: true,
+      jobNumber: true,
+      description: true,
+      clientName: true,
+      createdAt: true,
+      unit: { select: { code: true } },
+      attachments: {
+        where: { kind: "DRAWING" },
+        select: { id: true, filename: true, mimeType: true },
+      },
+    },
+    orderBy: { jobNumber: "desc" },
+    take: 100,
+  });
+  const pastDrawingJobs = pastDrawingJobsRaw.map((j) => ({
+    jobId: j.id,
+    label: `${jobCode(j.jobNumber)} ${j.description} — ${j.clientName} (${j.unit.code}, ${formatDate(j.createdAt)})`,
+    drawings: j.attachments,
+  }));
 
   // Delays and pending items on this job — shown before anything else.
   const alerts = await jobAlerts([id])
@@ -303,6 +333,14 @@ export default async function JobPage({
               <h1 className="text-xl font-bold">{job.description}</h1>
               <span className="text-slate-400">{jobCode(job.jobNumber)}</span>
               <JobStatusBadge status={job.status} />
+            {job.drawingPending && (
+              <span
+                className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-300"
+                title="A previous job's drawing was offered but the supervisor said it may have changed — an updated drawing is still to be uploaded"
+              >
+                📐 Drawing pending
+              </span>
+            )}
               {job.priority && <PriorityBadge />}
               {openIssues.length > 0 && <IssueBadge count={openIssues.length} />}
               {totalReworks > 0 && (
@@ -1151,6 +1189,12 @@ export default async function JobPage({
       {/* Documents: drawings & bill of material */}
       <section className="bg-white rounded-xl shadow-sm p-4">
         <h2 className="font-semibold mb-3">Documents</h2>
+        {job.drawingPending && (
+          <p className="mb-3 rounded-lg bg-amber-50 border border-amber-300 px-3 py-2 text-sm text-amber-900">
+            <b>📐 Drawing pending.</b> A previous job&apos;s drawing was not confirmed for this
+            job, so nothing was attached. Upload the updated drawing before work goes further.
+          </p>
+        )}
         {job.attachments.length === 0 && (
           <p className="text-sm text-slate-400 mb-3">
             No drawings or BOM uploaded yet.
@@ -1175,6 +1219,14 @@ export default async function JobPage({
                 {formatFileSize(att.size)} · {att.uploadedBy.name} ·{" "}
                 {formatDateTime(att.createdAt)}
               </span>
+              {att.sourceJobId && (
+                <span
+                  className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] bg-slate-200 text-slate-700"
+                  title="Reused from an earlier job after the supervisor confirmed nothing had changed"
+                >
+                  ♻️ reused
+                </span>
+              )}
               {admin && (
                 <form action={deleteAttachment} className="ml-auto">
                   <input type="hidden" name="attachmentId" value={att.id} />
@@ -1186,7 +1238,14 @@ export default async function JobPage({
             </li>
           ))}
         </ul>
-        {admin && <AttachmentUpload jobId={job.id} />}
+        {/* Add a drawing: upload a new one, or reuse a past job's after
+            confirming nothing has changed. Supervisors can do this — they are
+            the ones the morning list asks for drawings. */}
+        <DrawingPicker
+          jobId={job.id}
+          jobName={job.description}
+          pastJobs={pastDrawingJobs}
+        />
       </section>
 
       {/* Testing requirements */}

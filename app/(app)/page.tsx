@@ -20,6 +20,7 @@ import { istToday } from "@/lib/overheads";
 import { buildTodoData } from "@/lib/todo";
 import { buildOffList } from "@/lib/attendance-off";
 import { jobAlerts } from "@/lib/job-alerts";
+import { DailyFindings } from "@/components/daily-findings";
 import { ABSENCE_LABELS, COMPLAINT_ABSENCES } from "@/lib/absence";
 import { toggleLeaveToday } from "@/lib/actions/employees";
 import type { JobStatus } from "@prisma/client";
@@ -180,6 +181,9 @@ export default async function DashboardPage({
           </section>
         </div>
       )}
+
+      {/* Monitoring agent's findings — owner only, decided on the server */}
+      {user.role === "SUPERADMIN" && <DailyFindings />}
 
       {/* Morning reminders banner */}
       {todoTotal > 0 && (

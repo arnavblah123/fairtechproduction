@@ -33,6 +33,7 @@ export default async function MorePage() {
     ...(isAdmin ? [{ href: "/templates", label: "Process Templates", icon: "📋" }] : []),
     ...(isAdmin ? [{ href: "/users", label: "Users", icon: "👤" }] : []),
     { href: "/attendance", label: "Attendance Events", icon: "🕐" },
+    ...(user.role === "SUPERADMIN" ? [{ href: "/assistant", label: "Ask about the factory", icon: "🤖" }] : []),
     ...(user.role === "SUPERADMIN" ? [{ href: "/reports", label: "Reports", icon: "📊" }] : []),
     ...(user.role === "SUPERADMIN" ? [{ href: "/planner", label: "Owner's Scorecard", icon: "📅" }] : []),
     ...(user.role === "SUPERADMIN" ? [{ href: "/overheads", label: "Overhead Costs", icon: "💸" }] : []),
