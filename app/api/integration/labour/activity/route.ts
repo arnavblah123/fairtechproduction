@@ -82,8 +82,27 @@ export async function GET(req: NextRequest) {
     select: { actorName: true, action: true, occurredAt: true, subjectId: true },
   });
 
-  type Bucket = { calls: number; entered: number; msgs: number; workers: Set<string> };
-  const mk = (): Bucket => ({ calls: 0, entered: 0, msgs: 0, workers: new Set() });
+  // When was each worker first ever contacted? Lets us split today's work
+  // into fresh outreach and follow-ups with people we already know.
+  const firstEver = new Map<string, number>();
+  for (const r of await prisma.labourActivity.findMany({
+    where: { action: { in: [...CALL_ACTIONS] } },
+    select: { subjectId: true, occurredAt: true },
+    orderBy: { occurredAt: "asc" },
+  })) {
+    if (!firstEver.has(r.subjectId)) firstEver.set(r.subjectId, r.occurredAt.getTime());
+  }
+
+  type Bucket = {
+    calls: number; entered: number; msgs: number;
+    workers: Set<string>; newWorkers: Set<string>; repeatWorkers: Set<string>;
+    noAnswer: number; interested: number; saved: number; hired: number; notInterested: number;
+  };
+  const mk = (): Bucket => ({
+    calls: 0, entered: 0, msgs: 0,
+    workers: new Set(), newWorkers: new Set(), repeatWorkers: new Set(),
+    noAnswer: 0, interested: 0, saved: 0, hired: 0, notInterested: 0,
+  });
   const byPerson: Record<string, Bucket> = {};
   const byPersonToday: Record<string, Bucket> = {};
   const byDay: Record<string, Bucket> = {};
@@ -91,6 +110,11 @@ export async function GET(req: NextRequest) {
   for (const r of rows) {
     const dayKey = new Date(r.occurredAt.getTime() + IST_MS).toISOString().slice(0, 10);
     const who = r.actorName || "Unknown device";
+    const first = firstEver.get(r.subjectId);
+    // "New" = this day is the day we first ever reached that worker.
+    const isNew =
+      first !== undefined &&
+      new Date(first + IST_MS).toISOString().slice(0, 10) === dayKey;
     for (const [map, key] of [
       [byPerson, who],
       [byDay, dayKey],
@@ -100,15 +124,38 @@ export async function GET(req: NextRequest) {
       if (CALL_ACTIONS.has(r.action)) {
         b.calls++;
         b.workers.add(r.subjectId);
+        (isNew ? b.newWorkers : b.repeatWorkers).add(r.subjectId);
       }
       if (OUTCOME_ACTIONS.has(r.action)) b.entered++;
       if (r.action === "whatsapp_sent") b.msgs++;
+      if (r.action === "no_response") b.noAnswer++;
+      if (r.action === "interested") b.interested++;
+      if (r.action === "saved_contact") b.saved++;
+      if (r.action === "hired") b.hired++;
+      if (r.action === "not_interested") b.notInterested++;
     }
   }
 
   const flat = (m: Record<string, Bucket>) =>
     Object.fromEntries(
-      Object.entries(m).map(([k, b]) => [k, { calls: b.calls, entered: b.entered, msgs: b.msgs, workers: b.workers.size }])
+      Object.entries(m).map(([k, b]) => [
+        k,
+        {
+          calls: b.calls,
+          entered: b.entered,
+          msgs: b.msgs,
+          workers: b.workers.size,
+          newWorkers: b.newWorkers.size,
+          repeatWorkers: b.repeatWorkers.size,
+          noAnswer: b.noAnswer,
+          // Calls that turned into an actual conversation.
+          connected: Math.max(0, b.calls - b.noAnswer),
+          interested: b.interested,
+          saved: b.saved,
+          hired: b.hired,
+          notInterested: b.notInterested,
+        },
+      ])
     );
 
   return NextResponse.json(
