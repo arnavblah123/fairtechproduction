@@ -18,11 +18,13 @@ const COLUMNS = [
   ["Job", "poAwaited"],
   ["Job", "poExpectedBy"],
   ["Job", "finishedWeightKg"],
+  ["Job", "drawingPending"],
+  ["JobAttachment", "sourceJobId"],
   ["Issue", "dueAt"],
   ["LeaveDay", "reason"],
   ["Stage", "plannedStart"],
 ];
-const TABLES = ["LabourComplaint", "LeavePeriod", "StagePlanWorker"];
+const TABLES = ["LabourComplaint", "LeavePeriod", "StagePlanWorker", "ai_tool_calls", "daily_findings"];
 
 async function missingBits(db) {
   const missing = [];

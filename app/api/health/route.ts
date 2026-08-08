@@ -51,6 +51,8 @@ export async function GET() {
   const expected: [string, string][] = [
     ["Job", "poAwaited"],
     ["Job", "finishedWeightKg"],
+    ["Job", "drawingPending"],
+    ["JobAttachment", "sourceJobId"],
     ["Issue", "dueAt"],
     ["LeaveDay", "reason"],
     ["Stage", "plannedStart"],
@@ -66,7 +68,7 @@ export async function GET() {
       missing.push(`${table}.${column} (check failed)`);
     }
   }
-  for (const table of ["LabourComplaint", "LeavePeriod", "StagePlanWorker"]) {
+  for (const table of ["LabourComplaint", "LeavePeriod", "StagePlanWorker", "ai_tool_calls", "daily_findings"]) {
     try {
       const found = await db.$queryRaw<{ n: bigint }[]>`
         SELECT count(*) AS n FROM information_schema.tables WHERE table_name = ${table}`;

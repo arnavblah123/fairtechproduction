@@ -191,28 +191,35 @@ export default async function JobPage({
       : [];
 
   // Earlier jobs whose drawings can be reused here — same unit first, most
-  // recent first. Only jobs that actually have a drawing.
-  const pastDrawingJobsRaw = await db.job.findMany({
-    where: {
-      id: { not: id },
-      attachments: { some: { kind: "DRAWING" } },
-      ...(user.role === "SUPERADMIN" ? {} : { unitId: { in: user.unitIds } }),
-    },
-    select: {
-      id: true,
-      jobNumber: true,
-      description: true,
-      clientName: true,
-      createdAt: true,
-      unit: { select: { code: true } },
-      attachments: {
-        where: { kind: "DRAWING" },
-        select: { id: true, filename: true, mimeType: true },
+  // recent first. Only jobs that actually have a drawing. Best-effort: the
+  // "use a past drawing" picker is a convenience, not core to opening the
+  // job, so it must never be able to take the whole page down.
+  const pastDrawingJobsRaw = await db.job
+    .findMany({
+      where: {
+        id: { not: id },
+        attachments: { some: { kind: "DRAWING" } },
+        ...(user.role === "SUPERADMIN" ? {} : { unitId: { in: user.unitIds } }),
       },
-    },
-    orderBy: { jobNumber: "desc" },
-    take: 100,
-  });
+      select: {
+        id: true,
+        jobNumber: true,
+        description: true,
+        clientName: true,
+        createdAt: true,
+        unit: { select: { code: true } },
+        attachments: {
+          where: { kind: "DRAWING" },
+          select: { id: true, filename: true, mimeType: true },
+        },
+      },
+      orderBy: { jobNumber: "desc" },
+      take: 100,
+    })
+    .catch((e) => {
+      console.error("past drawing jobs query failed:", e);
+      return [] as never[];
+    });
   const pastDrawingJobs = pastDrawingJobsRaw.map((j) => ({
     jobId: j.id,
     label: `${jobCode(j.jobNumber)} ${j.description} — ${j.clientName} (${j.unit.code}, ${formatDate(j.createdAt)})`,

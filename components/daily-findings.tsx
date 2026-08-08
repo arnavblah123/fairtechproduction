@@ -17,12 +17,20 @@ const ICON: Record<string, string> = { high: "🔴", medium: "🟠", low: "⚪�
 export async function DailyFindings() {
   const today = istToday();
   const yesterday = new Date(today.getTime() - 86400000);
-  const findings = await db.dailyFinding.findMany({
-    where: { day: { gte: yesterday }, acknowledged: false },
-    include: { job: { select: { id: true, jobNumber: true, description: true } } },
-    orderBy: [{ runAt: "desc" }],
-    take: 25,
-  });
+  // If the daily_findings table is ever a beat behind the deployed code (a
+  // migration lag, a transient connection issue), this panel must disappear
+  // quietly rather than take the whole dashboard down with it.
+  const findings = await db.dailyFinding
+    .findMany({
+      where: { day: { gte: yesterday }, acknowledged: false },
+      include: { job: { select: { id: true, jobNumber: true, description: true } } },
+      orderBy: [{ runAt: "desc" }],
+      take: 25,
+    })
+    .catch((e) => {
+      console.error("daily findings query failed:", e);
+      return [];
+    });
   if (findings.length === 0) return null;
 
   const order = { high: 0, medium: 1, low: 2 } as Record<string, number>;
