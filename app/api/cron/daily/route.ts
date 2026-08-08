@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runMonitor } from "@/lib/ai/monitor";
+import { runLabourReport } from "@/lib/labour-report";
 
-// Scheduled twice a day — 11:00 and 16:00 IST — to run the production
-// monitoring agent.
-//
-// The evening labour-calling report used to run from here too. It is switched
-// off for now (no reports were arriving); /api/cron/labour-report is still in
-// the codebase and can be called by hand, and re-scheduling it is one line in
-// vercel.json plus a branch here.
+// Scheduled three times a day — 11:00, 16:00 and 20:00 IST. The morning and
+// afternoon runs work the production monitoring agent; the evening run sends
+// the labour-calling report (calls made, results entered, who did what, and
+// the pipeline by stage). The response says whether the mail actually left,
+// and why not when it didn't, so a silent failure shows up in the Vercel cron
+// log instead of simply producing no email.
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
@@ -20,6 +20,12 @@ export async function GET(req: NextRequest) {
   const istHour = Number(
     new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata", hour: "2-digit", hour12: false })
   );
+  // Evening slot (or an explicit ?task=labour) sends the labour report.
+  if (istHour >= 18 || req.nextUrl.searchParams.get("task") === "labour") {
+    const result = await runLabourReport();
+    return NextResponse.json({ ran: "labour-report", istHour, ...result });
+  }
+
   const result = await runMonitor();
   return NextResponse.json({ ran: "monitor", istHour, ...result }, {
     status: result.ok ? 200 : 500,
