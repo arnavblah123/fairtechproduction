@@ -13,10 +13,12 @@ export default async function MorePage() {
   const links = user.role === "HR"
     ? [
         { href: "/labour", label: "Labour App", icon: "💼" },
+        { href: "/labour-requests", label: "Labour Requests", icon: "🧑‍🌾" },
         { href: "/account", label: "My Account & Password", icon: "⚙️" },
       ]
     : [
     { href: "/employees", label: "Workers", icon: "👷" },
+    { href: "/labour-requests", label: "Labour Request", icon: "🧑‍🌾" },
     { href: "/issues", label: "Issues", icon: "🚩" },
     { href: "/planning", label: "Production Planning", icon: "🗓️" },
     { href: "/calendar", label: "Job Work Calendar", icon: "📅" },

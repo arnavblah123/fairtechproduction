@@ -21,10 +21,14 @@ export default async function AppLayout({
   // HR accounts get exactly one page: Labour. Purchase/HR also see what the
   // shop floor needs (Issues) and what is coming up (Planning).
   const links = isHr
-    ? [{ href: "/labour", label: "Labour" }]
+    ? [
+        { href: "/labour", label: "Labour" },
+        { href: "/labour-requests", label: "Labour Requests" },
+      ]
     : isPurchaseHr
     ? [
         { href: "/issues", label: "Issues" },
+        { href: "/labour-requests", label: "Labour Requests" },
         { href: "/planning", label: "Planning" },
         { href: "/calendar", label: "Calendar" },
         { href: "/labour", label: "Labour" },
@@ -33,6 +37,7 @@ export default async function AppLayout({
         { href: "/", label: "Dashboard" },
         { href: "/jobs", label: "Jobs" },
         { href: "/todo", label: "To-Do" },
+        { href: "/labour-requests", label: "Labour Request" },
         ...(isAdmin ? [{ href: "/templates", label: "Templates" }] : []),
         { href: "/employees", label: "Employees" },
         { href: "/issues", label: "Issues" },

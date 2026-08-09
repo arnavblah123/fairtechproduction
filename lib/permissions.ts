@@ -36,7 +36,10 @@ export function isAdmin(user: SessionUser) {
 }
 
 export function canAccessUnit(user: SessionUser, unitId: string) {
-  if (user.role === "SUPERADMIN") return true;
+  // Purchase/HR and HR are company-wide desks (see unitScope below) — they
+  // need to act on labour requests from any unit, not just ones they're
+  // rostered to.
+  if (user.role === "SUPERADMIN" || user.role === "PURCHASE_HR" || user.role === "HR") return true;
   return user.unitIds.includes(unitId);
 }
 
@@ -47,8 +50,8 @@ export function assertUnitAccess(user: SessionUser, unitId: string) {
 }
 
 // Prisma `where` fragment limiting a query to the user's units.
-// Purchase/HR is a company-wide desk — they buy and hire for every unit.
+// Purchase/HR and HR are company-wide desks — they buy and hire for every unit.
 export function unitScope(user: SessionUser): { unitId?: { in: string[] } } {
-  if (user.role === "SUPERADMIN" || user.role === "PURCHASE_HR") return {};
+  if (user.role === "SUPERADMIN" || user.role === "PURCHASE_HR" || user.role === "HR") return {};
   return { unitId: { in: user.unitIds } };
 }

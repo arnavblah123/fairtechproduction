@@ -33,6 +33,7 @@ export async function raiseIssue(formData: FormData) {
   await sendIssueAlert(issue.id);
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/issues");
+  revalidatePath("/labour-requests");
   revalidatePath("/");
 }
 
@@ -48,5 +49,6 @@ export async function resolveIssue(formData: FormData) {
   await audit(user.id, "issue.resolve", "Issue", issueId);
   revalidatePath(`/jobs/${issue.jobId}`);
   revalidatePath("/issues");
+  revalidatePath("/labour-requests");
   revalidatePath("/");
 }
