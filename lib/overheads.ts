@@ -24,12 +24,15 @@ export async function overheadByJob(jobIds: string[]): Promise<Map<string, numbe
   if (jobIds.length === 0) return new Map();
   const rows = await db.$queryRaw<{ jobId: string; overhead: number }[]>(Prisma.sql`
     WITH day_jobs AS (
+      -- The unit comes from the TimeLog itself, not the job's current
+      -- unitId: a job moved to another unit later must not retroactively
+      -- change which unit's supervisor salary / fixed overheads it (or its
+      -- former unit-mates) were pooled against on days that already happened.
       SELECT DISTINCT
         (l."startedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date AS d,
-        j."unitId" AS unit,
+        l."unitId" AS unit,
         l."jobId" AS job
       FROM "TimeLog" l
-      JOIN "Job" j ON j.id = l."jobId"
       WHERE l."jobId" IS NOT NULL
     ),
     counts_unit AS (
