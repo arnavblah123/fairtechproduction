@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AttachmentUpload } from "@/components/attachment-upload";
 import { reuseDrawing } from "@/lib/actions/drawings";
 
@@ -13,21 +13,29 @@ export type PastJobDrawing = {
 // Adding a drawing: upload a new file, or reuse one from an earlier job.
 // Reuse always ends with the same question — has the drawing changed? — and a
 // "not sure" answer deliberately attaches nothing.
-export function DrawingPicker({
-  jobId,
-  jobName,
-  pastJobs,
-}: {
-  jobId: string;
-  jobName: string;
-  pastJobs: PastJobDrawing[];
-}) {
+//
+// The past-jobs list is fetched on demand (only once "reuse" is opened),
+// not passed in from the job page — that query scans every job with a
+// drawing and used to run on every single job view.
+export function DrawingPicker({ jobId, jobName }: { jobId: string; jobName: string }) {
   const [mode, setMode] = useState<"none" | "new" | "reuse">("none");
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<PastJobDrawing | null>(null);
+  const [pastJobs, setPastJobs] = useState<PastJobDrawing[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    if (mode !== "reuse" || pastJobs !== null) return;
+    fetch(`/api/jobs/${jobId}/past-drawings`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => setPastJobs(data.jobs))
+      .catch(() => setLoadError(true));
+  }, [mode, pastJobs, jobId]);
 
   const q = query.trim().toLowerCase();
-  const shown = (q ? pastJobs.filter((j) => j.label.toLowerCase().includes(q)) : pastJobs).slice(0, 30);
+  const shown = (
+    q ? (pastJobs ?? []).filter((j) => j.label.toLowerCase().includes(q)) : (pastJobs ?? [])
+  ).slice(0, 30);
 
   const tab = (active: boolean) =>
     `rounded-lg px-3 py-2 text-sm font-medium ${
@@ -40,12 +48,7 @@ export function DrawingPicker({
         <button onClick={() => setMode("new")} className={tab(mode === "new")}>
           ⬆️ Upload new drawing
         </button>
-        <button
-          onClick={() => setMode("reuse")}
-          className={tab(mode === "reuse")}
-          disabled={pastJobs.length === 0}
-          title={pastJobs.length === 0 ? "No earlier job has a drawing yet" : undefined}
-        >
+        <button onClick={() => setMode("reuse")} className={tab(mode === "reuse")}>
           ♻️ Use drawing from a previous job
         </button>
       </div>
@@ -72,6 +75,14 @@ export function DrawingPicker({
                 style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
               />
               <div className="max-h-64 overflow-y-auto space-y-1">
+                {pastJobs === null && !loadError && (
+                  <p className="text-sm text-slate-400 px-1 py-2">Loading past jobs…</p>
+                )}
+                {loadError && (
+                  <p className="text-sm text-red-600 px-1 py-2">
+                    Could not load past jobs — try again.
+                  </p>
+                )}
                 {shown.map((j) => (
                   <button
                     key={j.jobId}
@@ -85,8 +96,10 @@ export function DrawingPicker({
                     </span>
                   </button>
                 ))}
-                {shown.length === 0 && (
-                  <p className="text-sm text-slate-400 px-1 py-2">No past job matches.</p>
+                {pastJobs !== null && shown.length === 0 && (
+                  <p className="text-sm text-slate-400 px-1 py-2">
+                    {pastJobs.length === 0 ? "No earlier job has a drawing yet." : "No past job matches."}
+                  </p>
                 )}
               </div>
             </>

@@ -350,6 +350,7 @@ model JobAttachment {
   createdAt    DateTime       @default(now())
 
   @@index([jobId])
+  @@index([kind])
 }
 
 enum StageStatus {

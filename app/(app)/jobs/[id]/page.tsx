@@ -190,42 +190,6 @@ export default async function JobPage({
         })
       : [];
 
-  // Earlier jobs whose drawings can be reused here — same unit first, most
-  // recent first. Only jobs that actually have a drawing. Best-effort: the
-  // "use a past drawing" picker is a convenience, not core to opening the
-  // job, so it must never be able to take the whole page down.
-  const pastDrawingJobsRaw = await db.job
-    .findMany({
-      where: {
-        id: { not: id },
-        attachments: { some: { kind: "DRAWING" } },
-        ...(user.role === "SUPERADMIN" ? {} : { unitId: { in: user.unitIds } }),
-      },
-      select: {
-        id: true,
-        jobNumber: true,
-        description: true,
-        clientName: true,
-        createdAt: true,
-        unit: { select: { code: true } },
-        attachments: {
-          where: { kind: "DRAWING" },
-          select: { id: true, filename: true, mimeType: true },
-        },
-      },
-      orderBy: { jobNumber: "desc" },
-      take: 100,
-    })
-    .catch((e) => {
-      console.error("past drawing jobs query failed:", e);
-      return [] as never[];
-    });
-  const pastDrawingJobs = pastDrawingJobsRaw.map((j) => ({
-    jobId: j.id,
-    label: `${jobCode(j.jobNumber)} ${j.description} — ${j.clientName} (${j.unit.code}, ${formatDate(j.createdAt)})`,
-    drawings: j.attachments,
-  }));
-
   // Delays and pending items on this job — shown before anything else.
   const alerts = await jobAlerts([id])
     .then((m) => m.get(id) ?? null)
@@ -1248,11 +1212,7 @@ export default async function JobPage({
         {/* Add a drawing: upload a new one, or reuse a past job's after
             confirming nothing has changed. Supervisors can do this — they are
             the ones the morning list asks for drawings. */}
-        <DrawingPicker
-          jobId={job.id}
-          jobName={job.description}
-          pastJobs={pastDrawingJobs}
-        />
+        <DrawingPicker jobId={job.id} jobName={job.description} />
       </section>
 
       {/* Testing requirements */}
