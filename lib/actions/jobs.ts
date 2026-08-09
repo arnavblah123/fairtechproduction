@@ -264,8 +264,16 @@ export async function updateJob(
   const clientName = String(formData.get("clientName") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const expectedCompletionRaw = String(formData.get("expectedCompletion") ?? "");
+  const unitId = String(formData.get("unitId") ?? "") || job.unitId;
   if (!clientName || !description || !expectedCompletionRaw) {
     return { error: "Client, description and expected completion are required." };
+  }
+  if (unitId !== job.unitId) {
+    try {
+      assertUnitAccess(user, unitId);
+    } catch {
+      return { error: "You do not have access to that unit." };
+    }
   }
 
   await db.job.update({
@@ -278,8 +286,24 @@ export async function updateJob(
       expectedCompletion: new Date(expectedCompletionRaw),
       reminderDaysBefore: Number(formData.get("reminderDaysBefore") ?? 7) || 7,
       priority: formData.get("priority") === "on",
+      unitId,
     },
   });
+
+  if (unitId !== job.unitId) {
+    // Carry over anything still running under the old unit — closed/historical
+    // logs stay put, they're a record of where the work actually happened.
+    await db.timeLog.updateMany({
+      where: { jobId, unitId: job.unitId, endedAt: null },
+      data: { unitId },
+    });
+    await db.craneLog.updateMany({
+      where: { jobId, unitId: job.unitId, endedAt: null },
+      data: { unitId },
+    });
+    await audit(user.id, "job.moveUnit", "Job", jobId, { from: job.unitId, to: unitId });
+  }
+
   await audit(user.id, "job.update", "Job", jobId);
   await syncJobToCalendar(jobId); // date/reminder may have changed
   revalidatePath(`/jobs/${jobId}`);

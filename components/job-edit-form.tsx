@@ -14,13 +14,15 @@ type Props = {
     expectedCompletion: string;
     reminderDaysBefore: number;
     priority: boolean;
+    unitId: string;
   };
+  units: { id: string; name: string }[];
 };
 
 const inputCls = "w-full rounded-lg border border-slate-300 px-3 py-2 text-base";
 const labelCls = "block text-sm font-medium mb-1";
 
-export function JobEditForm({ job }: Props) {
+export function JobEditForm({ job, units }: Props) {
   const [state, action, pending] = useActionState(updateJob, undefined);
   return (
     <form action={action} className="bg-white rounded-xl shadow p-6 space-y-4">
@@ -31,6 +33,19 @@ export function JobEditForm({ job }: Props) {
       <div>
         <label className={labelCls}>Client name *</label>
         <input name="clientName" required defaultValue={job.clientName} className={inputCls} />
+      </div>
+      <div>
+        <label className={labelCls}>Unit *</label>
+        <select name="unitId" required defaultValue={job.unitId} className={inputCls}>
+          {units.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-slate-500 mt-1">
+          Moving units also moves any of this job&apos;s clocks that are still running.
+        </p>
       </div>
       <div>
         <label className={labelCls}>Buyer</label>

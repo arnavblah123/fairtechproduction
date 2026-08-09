@@ -12,7 +12,13 @@ export default async function EditJobPage({
 }) {
   const user = await requireRole("ADMIN", "SUPERADMIN");
   const { id } = await params;
-  const job = await db.job.findUnique({ where: { id } });
+  const [job, units] = await Promise.all([
+    db.job.findUnique({ where: { id } }),
+    db.unit.findMany({
+      where: user.role === "SUPERADMIN" ? {} : { id: { in: user.unitIds } },
+      orderBy: { name: "asc" },
+    }),
+  ]);
   if (!job || !canAccessUnit(user, job.unitId)) notFound();
 
   return (
@@ -28,7 +34,9 @@ export default async function EditJobPage({
           expectedCompletion: job.expectedCompletion.toISOString().slice(0, 10),
           reminderDaysBefore: job.reminderDaysBefore,
           priority: job.priority,
+          unitId: job.unitId,
         }}
+        units={units.map((u) => ({ id: u.id, name: u.name }))}
       />
     </div>
   );
