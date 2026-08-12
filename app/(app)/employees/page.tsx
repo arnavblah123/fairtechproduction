@@ -7,17 +7,18 @@ import { recordLongLeave, cancelLongLeave } from "@/lib/actions/leave";
 import { DisciplineForm } from "@/components/discipline-form";
 import { LiveDuration } from "@/components/live-duration";
 import { formatDate, jobCode, ACTIVITY_LABELS } from "@/lib/format";
+import { monthlyWorkerHours, fmtHours } from "@/lib/worker-hours";
 
 export const dynamic = "force-dynamic";
 
 export default async function EmployeesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ unit?: string; q?: string; inactive?: string }>;
+  searchParams: Promise<{ unit?: string; q?: string; inactive?: string; month?: string }>;
 }) {
   const user = await requireUser();
   lockHrToLabour(user);
-  const { unit: unitFilter, q, inactive } = await searchParams;
+  const { unit: unitFilter, q, inactive, month } = await searchParams;
 
   const units = await db.unit.findMany({
     where: user.role === "SUPERADMIN" ? {} : { id: { in: user.unitIds } },
@@ -59,16 +60,22 @@ export default async function EmployeesPage({
     orderBy: { name: "asc" },
   });
 
-  // Long holidays running now or still to come.
+  // Long holidays running now or still to come, and each worker's clocked
+  // hours for the chosen month (defaults to this month) — one round trip.
   const today = new Date(new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
-  const leaves = await db.leavePeriod.findMany({
-    where: { toDate: { gte: today }, employee: { primaryUnitId: { in: unitIds } } },
-    include: {
-      employee: { select: { id: true, name: true, code: true, primaryUnit: { select: { code: true } } } },
-      markedBy: { select: { name: true } },
-    },
-    orderBy: { fromDate: "asc" },
-  });
+  const [leaves, hoursData] = await Promise.all([
+    db.leavePeriod.findMany({
+      where: { toDate: { gte: today }, employee: { primaryUnitId: { in: unitIds } } },
+      include: {
+        employee: { select: { id: true, name: true, code: true, primaryUnit: { select: { code: true } } } },
+        markedBy: { select: { name: true } },
+      },
+      orderBy: { fromDate: "asc" },
+    }),
+    monthlyWorkerHours(unitFilter ? [unitFilter] : unitIds, month),
+  ]);
+  const hoursByWorker = new Map(hoursData.workers.map((w) => [w.id, w.totalMinutes]));
+  const csvHref = `/api/employees/hours?month=${hoursData.label}${unitFilter ? `&unit=${unitFilter}` : ""}`;
 
   return (
     <div className="space-y-4">
@@ -179,7 +186,23 @@ export default async function EmployeesPage({
           <input type="checkbox" name="inactive" value="1" defaultChecked={inactive === "1"} className="h-4 w-4" />
           Show inactive
         </label>
+        {/* Which month the Hours column (and the CSV) covers */}
+        <input
+          type="month"
+          name="month"
+          defaultValue={hoursData.label}
+          className="rounded-lg border border-slate-300 px-2 py-1.5"
+          title="Month for the Hours column and the download"
+        />
         <button className="rounded-lg bg-slate-900 text-white px-4 py-1.5">Filter</button>
+        <a
+          href={csvHref}
+          download
+          className="rounded-lg bg-green-600 text-white px-4 py-1.5 font-medium hover:bg-green-700"
+          title="One row per worker, one column per date of the month, total at the end — opens in Excel"
+        >
+          ⬇ Hours CSV ({hoursData.label})
+        </a>
       </form>
 
       <div className="bg-white rounded-xl shadow-sm overflow-x-auto">
@@ -193,6 +216,9 @@ export default async function EmployeesPage({
               {user.role === "SUPERADMIN" && <th className="px-4 py-3">ESI/PF ₹/mo</th>}
               <th className="px-4 py-3">Skill</th>
               <th className="px-4 py-3">Unit</th>
+              <th className="px-4 py-3" title="Clocked hours in the selected month, OT credit included">
+                Hours ({hoursData.label})
+              </th>
               <th className="px-4 py-3">Working on now</th>
               <th className="px-4 py-3">Discipline</th>
               <th className="px-4 py-3">Transfer history</th>
@@ -266,6 +292,11 @@ export default async function EmployeesPage({
                 )}
                 <td className="px-4 py-3">{emp.skill}</td>
                 <td className="px-4 py-3 whitespace-nowrap">{emp.primaryUnit.name}</td>
+                <td className="px-4 py-3 whitespace-nowrap font-medium">
+                  {(hoursByWorker.get(emp.id) ?? 0) > 0
+                    ? `${fmtHours(hoursByWorker.get(emp.id)!)} h`
+                    : <span className="text-slate-300 font-normal">—</span>}
+                </td>
                 <td className="px-4 py-3">
                   {emp.timeLogs.length > 0 ? (
                     emp.timeLogs.map((log) => (
