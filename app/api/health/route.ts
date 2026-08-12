@@ -68,7 +68,7 @@ export async function GET() {
       missing.push(`${table}.${column} (check failed)`);
     }
   }
-  for (const table of ["LabourComplaint", "LeavePeriod", "StagePlanWorker", "ai_tool_calls", "daily_findings"]) {
+  for (const table of ["LabourComplaint", "LeavePeriod", "StagePlanWorker", "ai_tool_calls", "daily_findings", "GeneralIssue"]) {
     try {
       const found = await db.$queryRaw<{ n: bigint }[]>`
         SELECT count(*) AS n FROM information_schema.tables WHERE table_name = ${table}`;

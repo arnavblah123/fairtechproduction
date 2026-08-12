@@ -24,7 +24,7 @@ const COLUMNS = [
   ["LeaveDay", "reason"],
   ["Stage", "plannedStart"],
 ];
-const TABLES = ["LabourComplaint", "LeavePeriod", "StagePlanWorker", "ai_tool_calls", "daily_findings"];
+const TABLES = ["LabourComplaint", "LeavePeriod", "StagePlanWorker", "ai_tool_calls", "daily_findings", "GeneralIssue"];
 
 async function missingBits(db) {
   const missing = [];

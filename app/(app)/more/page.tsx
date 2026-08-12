@@ -20,6 +20,7 @@ export default async function MorePage() {
     { href: "/employees", label: "Workers", icon: "👷" },
     { href: "/labour-requests", label: "Labour Request", icon: "🧑‍🌾" },
     { href: "/issues", label: "Issues", icon: "🚩" },
+    { href: "/issues", label: "Report a factory problem", icon: "🏭" },
     { href: "/planning", label: "Production Planning", icon: "🗓️" },
     { href: "/calendar", label: "Job Work Calendar", icon: "📅" },
     ...(user.role === "SUPERADMIN" ? [{ href: "/labour", label: "Labour App", icon: "💼" }] : []),
@@ -58,7 +59,7 @@ export default async function MorePage() {
       <div className="bg-white rounded-xl shadow-sm divide-y divide-slate-100">
         {links.map((l) => (
           <Link
-            key={l.href}
+            key={`${l.href}-${l.label}`}
             href={l.href}
             className="flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 active:bg-slate-100"
           >

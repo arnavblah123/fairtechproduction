@@ -50,6 +50,8 @@ model User {
   futureJobsAdded FutureJob[]    @relation("FutureJobAddedBy")
   supervisorDays SupervisorDay[]
   todosCreated   TodoItem[]      @relation("TodoCreatedBy")
+  generalIssuesRaised   GeneralIssue[] @relation("GeneralIssueRaisedBy")
+  generalIssuesResolved GeneralIssue[] @relation("GeneralIssueResolvedBy")
 }
 
 // One record per supervisor/admin per day: "I'm working at unit X today."
@@ -145,6 +147,7 @@ model Unit {
   jobs      Job[]
   timeLogs  TimeLog[]
   issues    Issue[]
+  generalIssues GeneralIssue[]
   transfersIn  UnitTransfer[] @relation("TransferTo")
   transfersOut UnitTransfer[] @relation("TransferFrom")
   disciplines  Discipline[]
@@ -550,6 +553,25 @@ model Issue {
   @@index([jobId, status])
   // The Labour Requests page filters by type.
   @@index([type, status])
+}
+
+// A factory-level problem that belongs to no job: electricity gone, crane
+// vendor not answering, water, gate, anything. Stored apart from job issues
+// so job costing/alerts stay clean, but raised and resolved the same way.
+model GeneralIssue {
+  id           String      @id @default(cuid())
+  unitId       String? // null = whole company
+  unit         Unit?       @relation(fields: [unitId], references: [id])
+  description  String
+  status       IssueStatus @default(OPEN)
+  raisedById   String
+  raisedBy     User        @relation("GeneralIssueRaisedBy", fields: [raisedById], references: [id])
+  resolvedById String?
+  resolvedBy   User?       @relation("GeneralIssueResolvedBy", fields: [resolvedById], references: [id])
+  resolvedAt   DateTime?
+  createdAt    DateTime    @default(now())
+
+  @@index([status, createdAt])
 }
 
 // ---------- Production planning ----------
