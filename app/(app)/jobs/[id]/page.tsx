@@ -19,6 +19,7 @@ import { formatDate, formatDateTime, formatDuration, istDateInput, jobCode } fro
 import { googleCalendarLink, isCalendarConfigured } from "@/lib/google-calendar";
 import { DrawingPicker } from "@/components/drawing-picker";
 import { QuickAddEmployee } from "@/components/quick-add-employee";
+import { ActionButton, PendingSubmit } from "@/components/instant";
 import { SearchSelect } from "@/components/search-select";
 import { ShiftWorkerRow } from "@/components/shift-worker-row";
 import { JobCalendar } from "@/components/job-calendar";
@@ -97,13 +98,103 @@ export default async function JobPage({
   });
   if (!job || !canAccessUnit(user, job.unitId)) notFound();
 
-  // Workers available for assignment: the pool is shared — any active worker
-  // from any unit can be put on this job. Grouped with this job's unit first.
-  const employees = await db.employee.findMany({
-    where: { active: true },
-    include: { primaryUnit: true },
-    orderBy: { name: "asc" },
-  });
+  // Everything below depends only on the job row above — one round trip.
+  const shiftIds = (shift ?? "").split(",").filter(Boolean);
+  const [
+    employees,
+    allStageLogs,
+    costLogs,
+    overheadMap,
+    consumableData,
+    overheadItems,
+    alerts,
+    shiftEmployees,
+    shiftJobsRaw,
+  ] = await Promise.all([
+    // Workers available for assignment: the pool is shared — any active worker
+    // from any unit can be put on this job. Grouped with this job's unit first.
+    db.employee.findMany({
+      where: { active: true },
+      include: { primaryUnit: true },
+      orderBy: { name: "asc" },
+    }),
+    // Total actively-worked time per stage across every session — survives
+    // pause/restart/rework and never counts idle gaps between sessions.
+    db.timeLog.findMany({
+      where: { jobId: id, stageId: { not: null } },
+      select: {
+        stageId: true,
+        startedAt: true,
+        endedAt: true,
+        endSource: true,
+        otBonusMinutes: true,
+        employee: { select: { name: true } },
+      },
+      orderBy: { startedAt: "desc" },
+    }),
+    // Job cost: every logged hour on this job × that worker's hourly wage.
+    db.timeLog.findMany({
+      where: { jobId: id },
+      select: {
+        startedAt: true,
+        endedAt: true,
+        otBonusMinutes: true,
+        employee: { select: { id: true, name: true, hourlyWage: true } },
+      },
+    }),
+    // Supervisor-salary overheads: punched-in days ÷ 30, split over the unit's
+    // jobs running each day.
+    overheadByJob([id]),
+    // Consumables issued to this job in the Store app — owner-only figures.
+    user.role === "SUPERADMIN" ? getConsumableCostsWithStatus() : Promise.resolve(null),
+    // Running fixed overheads that touch this job's unit — editable in place.
+    user.role === "SUPERADMIN"
+      ? db.overheadItem.findMany({
+          where: {
+            endedAt: null,
+            OR: [{ units: { none: {} } }, { units: { some: { unitId: job.unitId } } }],
+          },
+          include: { units: { select: { unit: { select: { code: true } } } } },
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
+    // Delays and pending items on this job — shown before anything else.
+    jobAlerts([id])
+      .then((m) => m.get(id) ?? null)
+      .catch((e) => {
+        console.error("job alerts failed:", e);
+        return null;
+      }),
+    // Workers freed by a just-completed/paused stage, awaiting their next work.
+    shiftIds.length
+      ? db.employee.findMany({
+          where: { id: { in: shiftIds }, active: true },
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
+    // Destinations for the shift popup: every open job of this unit (same job
+    // first) with its unfinished stages, plus the general duties.
+    shiftIds.length
+      ? db.job.findMany({
+          where: {
+            unitId: job.unitId,
+            status: { in: ["NOT_STARTED", "IN_PROGRESS", "ON_HOLD"] },
+          },
+          select: {
+            id: true,
+            jobNumber: true,
+            clientName: true,
+            description: true,
+            stages: {
+              where: { status: { not: "DONE" } },
+              orderBy: { sequence: "asc" },
+              select: { id: true, name: true, sequence: true },
+            },
+          },
+          orderBy: { jobNumber: "asc" },
+        })
+      : Promise.resolve([]),
+  ]);
   const workerGroups = [
     { label: `${job.unit.name} (this unit)`, list: employees.filter((e) => e.primaryUnitId === job.unitId) },
     ...[...new Set(employees.filter((e) => e.primaryUnitId !== job.unitId).map((e) => e.primaryUnit.name))].map(
@@ -114,20 +205,6 @@ export default async function JobPage({
     ),
   ].filter((g) => g.list.length > 0);
 
-  // Total actively-worked time per stage across every session — survives
-  // pause/restart/rework and never counts idle gaps between sessions.
-  const allStageLogs = await db.timeLog.findMany({
-    where: { jobId: id, stageId: { not: null } },
-    select: {
-      stageId: true,
-      startedAt: true,
-      endedAt: true,
-      endSource: true,
-      otBonusMinutes: true,
-      employee: { select: { name: true } },
-    },
-    orderBy: { startedAt: "desc" },
-  });
   const stageWorked = workedByStage(allStageLogs);
   // Per-stage session history for the tap-to-open view on each card.
   const stageHistory = new Map<string, typeof allStageLogs>();
@@ -141,15 +218,6 @@ export default async function JobPage({
   // (set by the owner on the Employees page). Everyone with access to the
   // job sees the totals and the labour breakdown; the overhead breakdown
   // and editing stay owner-only.
-  const costLogs = await db.timeLog.findMany({
-    where: { jobId: id },
-    select: {
-      startedAt: true,
-      endedAt: true,
-      otBonusMinutes: true,
-      employee: { select: { id: true, name: true, hourlyWage: true } },
-    },
-  });
   const costEnd = job.completedAt ?? new Date();
   const perWorker = new Map<string, { name: string; wage: number | null; minutes: number }>();
   for (const l of costLogs) {
@@ -167,71 +235,16 @@ export default async function JobPage({
   );
   const labourCost = workerCosts.reduce((s, w) => s + (w.wage ?? 0) * (w.minutes / 60), 0);
   const unpricedCount = workerCosts.filter((w) => w.wage === null).length;
-  // Supervisor-salary overheads: punched-in days ÷ 30, split over the unit's
-  // jobs running each day.
-  const overheads = (await overheadByJob([id])).get(id) ?? 0;
-  // Consumables issued to this job in the Store app — owner-only figures.
-  // When they are missing we say why, rather than silently showing nothing.
-  const consumableData =
-    user.role === "SUPERADMIN" ? await getConsumableCostsWithStatus() : null;
+  const overheads = overheadMap.get(id) ?? 0;
+  // When consumables are missing we say why, rather than silently showing nothing.
   const consumables = consumableData?.costs.get(job.jobNumber) ?? null;
   const consumableProblem = consumableData?.problem ?? null;
   const consumableCost = consumables?.trueCost ?? 0;
-  // Running fixed overheads that touch this job's unit — editable in place.
-  const overheadItems =
-    user.role === "SUPERADMIN"
-      ? await db.overheadItem.findMany({
-          where: {
-            endedAt: null,
-            OR: [{ units: { none: {} } }, { units: { some: { unitId: job.unitId } } }],
-          },
-          include: { units: { select: { unit: { select: { code: true } } } } },
-          orderBy: { name: "asc" },
-        })
-      : [];
-
-  // Delays and pending items on this job — shown before anything else.
-  const alerts = await jobAlerts([id])
-    .then((m) => m.get(id) ?? null)
-    .catch((e) => {
-      console.error("job alerts failed:", e);
-      return null;
-    });
 
   const openIssues = job.issues.filter((i) => i.status === "OPEN");
   const totalReworks = job.stages.reduce((n, s) => n + s.reworks.length, 0);
   const admin = isAdmin(user);
 
-  // Workers freed by a just-completed/paused stage, awaiting their next work.
-  const shiftIds = (shift ?? "").split(",").filter(Boolean);
-  const shiftEmployees = shiftIds.length
-    ? await db.employee.findMany({
-        where: { id: { in: shiftIds }, active: true },
-        orderBy: { name: "asc" },
-      })
-    : [];
-  // Destinations for the shift popup: every open job of this unit (same job
-  // first) with its unfinished stages, plus the general duties.
-  const shiftJobsRaw = shiftEmployees.length
-    ? await db.job.findMany({
-        where: {
-          unitId: job.unitId,
-          status: { in: ["NOT_STARTED", "IN_PROGRESS", "ON_HOLD"] },
-        },
-        select: {
-          id: true,
-          jobNumber: true,
-          clientName: true,
-          description: true,
-          stages: {
-            where: { status: { not: "DONE" } },
-            orderBy: { sequence: "asc" },
-            select: { id: true, name: true, sequence: true },
-          },
-        },
-        orderBy: { jobNumber: "asc" },
-      })
-    : [];
   const shiftJobOptions = [
     ...shiftJobsRaw.filter((j) => j.id === job.id),
     ...shiftJobsRaw.filter((j) => j.id !== job.id),
@@ -608,22 +621,24 @@ export default async function JobPage({
 
           <div className="flex flex-wrap gap-2">
             {job.status === "IN_PROGRESS" && (
-              <form action={setJobStatus}>
-                <input type="hidden" name="jobId" value={job.id} />
-                <input type="hidden" name="status" value="ON_HOLD" />
-                <button className={`${btn} bg-amber-100 text-amber-800 hover:bg-amber-200`}>
-                  Put On Hold
-                </button>
-              </form>
+              <ActionButton
+                action={setJobStatus}
+                fields={{ jobId: job.id, status: "ON_HOLD" }}
+                className={`${btn} bg-amber-100 text-amber-800 hover:bg-amber-200`}
+                optimistic="⏸ Going on hold…"
+              >
+                Put On Hold
+              </ActionButton>
             )}
             {job.status === "ON_HOLD" && (
-              <form action={setJobStatus}>
-                <input type="hidden" name="jobId" value={job.id} />
-                <input type="hidden" name="status" value="IN_PROGRESS" />
-                <button className={`${btn} bg-blue-100 text-blue-800 hover:bg-blue-200`}>
-                  Resume
-                </button>
-              </form>
+              <ActionButton
+                action={setJobStatus}
+                fields={{ jobId: job.id, status: "IN_PROGRESS" }}
+                className={`${btn} bg-blue-100 text-blue-800 hover:bg-blue-200`}
+                optimistic="▶ Resuming…"
+              >
+                Resume
+              </ActionButton>
             )}
             {/* Final Done: production finished, estimated dispatch date required */}
             {job.status !== "COMPLETED" && (
@@ -949,16 +964,15 @@ export default async function JobPage({
                             <LiveDuration since={log.startedAt} />
                           </span>
                         </span>
-                        <form action={stopWorker}>
-                          <input type="hidden" name="timeLogId" value={log.id} />
-                          <input type="hidden" name="askShift" value="1" />
-                          <button
-                            className="text-xs font-medium text-red-600 rounded-lg px-2.5 py-1.5 hover:bg-red-50 active:bg-red-100"
-                            title="Stop this worker's clock"
-                          >
-                            Stop
-                          </button>
-                        </form>
+                        <ActionButton
+                          action={stopWorker}
+                          fields={{ timeLogId: log.id, askShift: "1" }}
+                          className="text-xs font-medium text-red-600 rounded-lg px-2.5 py-1.5 hover:bg-red-50 active:bg-red-100"
+                          title="Stop this worker's clock"
+                          optimistic="Stopping…"
+                        >
+                          Stop
+                        </ActionButton>
                       </div>
                       {/* Evening night plan */}
                       <form action={setShiftPlan} className="flex items-center gap-1">
@@ -1016,9 +1030,12 @@ export default async function JobPage({
                       }))
                     )}
                   />
-                  <button className="rounded-lg bg-blue-600 text-white px-3.5 py-1.5 text-sm active:bg-blue-700">
+                  <PendingSubmit
+                    className="rounded-lg bg-blue-600 text-white px-3.5 py-1.5 text-sm active:bg-blue-700 disabled:opacity-60"
+                    busy="…"
+                  >
                     ➜
-                  </button>
+                  </PendingSubmit>
                 </form>
               )}
 
@@ -1037,19 +1054,23 @@ export default async function JobPage({
                         className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-600"
                       />
                     )}
-                    <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-blue-600 text-white active:bg-blue-700">
+                    <PendingSubmit
+                      className="rounded-lg px-3 py-1.5 text-sm font-medium bg-blue-600 text-white active:bg-blue-700 disabled:opacity-60"
+                      busy={stage.status === "PAUSED" ? "Resuming…" : "Starting…"}
+                    >
                       {stage.status === "PAUSED" ? "Resume" : "Start"}
-                    </button>
+                    </PendingSubmit>
                   </form>
                 )}
                 {(stage.status === "ACTIVE" || stage.status === "REWORK") && (
-                  <form action={setStageStatus}>
-                    <input type="hidden" name="stageId" value={stage.id} />
-                    <input type="hidden" name="status" value="PAUSED" />
-                    <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-amber-500 text-white active:bg-amber-600">
-                      Pause
-                    </button>
-                  </form>
+                  <ActionButton
+                    action={setStageStatus}
+                    fields={{ stageId: stage.id, status: "PAUSED" }}
+                    className="rounded-lg px-3 py-1.5 text-sm font-medium bg-amber-500 text-white active:bg-amber-600 disabled:opacity-60"
+                    optimistic="Pausing…"
+                  >
+                    Pause
+                  </ActionButton>
                 )}
               </div>
 
@@ -1068,9 +1089,12 @@ export default async function JobPage({
                       placeholder="Inspected / checked by (compulsory)"
                       className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
                     />
-                    <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-green-600 text-white active:bg-green-700">
+                    <PendingSubmit
+                      className="rounded-lg px-3 py-1.5 text-sm font-medium bg-green-600 text-white active:bg-green-700 disabled:opacity-60"
+                      busy="Completing…"
+                    >
                       Confirm Done
-                    </button>
+                    </PendingSubmit>
                   </form>
                 </details>
               )}

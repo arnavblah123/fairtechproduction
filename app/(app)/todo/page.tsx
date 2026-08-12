@@ -12,6 +12,7 @@ import {
   markPoAwaited,
 } from "@/lib/actions/todo";
 import { stopWorker } from "@/lib/actions/stages";
+import { TodoTick } from "@/components/todo-tick";
 import { formatDate, formatDateTime, jobCode } from "@/lib/format";
 import { LiveDuration } from "@/components/live-duration";
 import { SearchSelect } from "@/components/search-select";
@@ -128,10 +129,7 @@ export default async function TodoPage() {
             key={t.id}
             className="flex flex-wrap items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2 text-sm"
           >
-            <form action={toggleTodoDone}>
-              <input type="hidden" name="itemId" value={t.id} />
-              <button className="h-5 w-5 rounded border-2 border-indigo-400 bg-white" title="Mark done" />
-            </form>
+            <TodoTick action={toggleTodoDone} itemId={t.id} />
             <span className="flex-1 min-w-0">
               {t.message}
               {t.job && (

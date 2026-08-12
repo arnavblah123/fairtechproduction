@@ -32,22 +32,18 @@ export async function reuseDrawing(formData: FormData) {
   if (answer === "same") {
     const drawings = await db.jobAttachment.findMany({
       where: { jobId: fromJobId, kind: "DRAWING" },
+      select: { id: true, filename: true },
     });
     if (drawings.length === 0) return;
     // The file keeps the name of the job it was drawn for; sourceJobId records
-    // where it came from so the job page can say so.
-    await db.jobAttachment.createMany({
-      data: drawings.map((d) => ({
-        jobId: toJobId,
-        kind: d.kind,
-        filename: d.filename,
-        mimeType: d.mimeType,
-        size: d.size,
-        data: d.data,
-        sourceJobId: fromJobId,
-        uploadedById: user.id,
-      })),
-    });
+    // where it came from so the job page can say so. The copy happens inside
+    // Postgres — the drawing bytes never travel to the app server.
+    await db.$executeRaw`
+      INSERT INTO "JobAttachment"
+        ("id", "jobId", "kind", "filename", "mimeType", "size", "data", "sourceJobId", "uploadedById")
+      SELECT gen_random_uuid()::text, ${toJobId}, "kind", "filename", "mimeType", "size", "data", ${fromJobId}, ${user.id}
+      FROM "JobAttachment"
+      WHERE "jobId" = ${fromJobId} AND "kind" = 'DRAWING'::"AttachmentKind"`;
     await db.job.update({ where: { id: toJobId }, data: { drawingPending: false } });
     await db.todoItem.updateMany({
       where: { jobId: toJobId, done: false, message: { startsWith: "Upload updated drawing" } },

@@ -108,6 +108,10 @@ model TodoItem {
   doneBy      String? // name of who ticked it
   doneAt      DateTime?
   createdAt   DateTime  @default(now())
+
+  // The morning list reads open items on every dashboard load.
+  @@index([done, unitId])
+  @@index([jobId, done])
 }
 
 model OverheadItemUnit {
@@ -506,6 +510,10 @@ model TimeLog {
   @@index([employeeId, endedAt])
   @@index([stageId, endedAt])
   @@index([jobId])
+  // Open clocks per unit (dashboard duty list, overnight to-do check).
+  @@index([unitId, endedAt])
+  // Date-window scans: reports, history, overhead spreading.
+  @@index([startedAt])
 }
 
 // ---------- Issues ----------
@@ -540,6 +548,8 @@ model Issue {
 
   @@index([unitId, status])
   @@index([jobId, status])
+  // The Labour Requests page filters by type.
+  @@index([type, status])
 }
 
 // ---------- Production planning ----------

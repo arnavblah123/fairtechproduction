@@ -51,59 +51,72 @@ export default async function DashboardPage({
   // scheduled cron also does this at 10 PM / 2:30 AM).
   await closeOverdueShifts();
 
-  const units = await db.unit.findMany({
-    where: user.role === "SUPERADMIN" ? {} : { id: { in: user.unitIds } },
-    orderBy: { name: "asc" },
-  });
-
-  // Daily punch-in: supervisors/admins mark which unit they're at today.
-  // Blocks the dashboard until done — like the worker-shift popup.
-  const todayPunch =
+  // First round trip: everything that depends only on the user/filters.
+  const [units, todayPunch, todoData, jobs] = await Promise.all([
+    db.unit.findMany({
+      where: user.role === "SUPERADMIN" ? {} : { id: { in: user.unitIds } },
+      orderBy: { name: "asc" },
+    }),
+    // Daily punch-in: supervisors/admins mark which unit they're at today.
+    // Blocks the dashboard until done — like the worker-shift popup.
     user.role === "SUPERADMIN"
       ? null
-      : await db.supervisorDay.findUnique({
+      : db.supervisorDay.findUnique({
           where: { userId_date: { userId: user.id, date: istToday() } },
           include: { unit: { select: { name: true } } },
-        });
-  const needsPunch = user.role !== "SUPERADMIN" && !todayPunch && units.length > 0;
-
-  // Morning-list badge: how many reminders are pending right now.
-  const todoTotal = (await buildTodoData(user)).total;
-
-  // Off today: present yesterday, nothing today, no leave tick.
-  const { offByUnit, onLeaveByUnit } = await buildOffList(units.map((u) => u.id));
-
-  const jobs = await db.job.findMany({
-    where: {
-      ...unitScope(user),
-      ...(unitFilter ? { unitId: unitFilter } : {}),
-      ...(clientFilter
-        ? { clientName: { contains: clientFilter, mode: "insensitive" } }
-        : {}),
-      ...(statusFilter
-        ? { status: statusFilter as JobStatus }
-        : { status: { not: "COMPLETED" } }),
-    },
-    include: {
-      stages: { orderBy: { sequence: "asc" } },
-      issues: { where: { status: "OPEN" } },
-      timeLogs: {
-        where: { endedAt: null },
-        include: { employee: true, stage: true },
+        }),
+    // Morning-list badge: how many reminders are pending right now.
+    buildTodoData(user),
+    db.job.findMany({
+      where: {
+        ...unitScope(user),
+        ...(unitFilter ? { unitId: unitFilter } : {}),
+        ...(clientFilter
+          ? { clientName: { contains: clientFilter, mode: "insensitive" } }
+          : {}),
+        ...(statusFilter
+          ? { status: statusFilter as JobStatus }
+          : { status: { not: "COMPLETED" } }),
       },
-    },
-    orderBy: [{ priority: "desc" }, { expectedCompletion: "asc" }],
-  });
+      include: {
+        stages: { orderBy: { sequence: "asc" } },
+        issues: { where: { status: "OPEN" } },
+        timeLogs: {
+          where: { endedAt: null },
+          include: { employee: true, stage: true },
+        },
+      },
+      orderBy: [{ priority: "desc" }, { expectedCompletion: "asc" }],
+    }),
+  ]);
+  const needsPunch = user.role !== "SUPERADMIN" && !todayPunch && units.length > 0;
+  const todoTotal = todoData.total;
 
-  // What's wrong on each job — the red strip on its card. Never let this
-  // take the dashboard down: the shop floor needs the board more than the strip.
-  const alertsByJob = await jobAlerts(jobs.map((j) => j.id)).catch((e) => {
-    console.error("job alerts failed:", e);
-    return new Map<string, { alerts: { severity: string; text: string; days: number }[]; lateCount: number; todoCount: number }>();
-  });
+  // Jobs in progress with nobody clocked on = idle right now. "Since" is the
+  // last time anyone stopped work (or the active stage start if never worked).
+  const idleJobs = jobs.filter(
+    (j) => j.status === "IN_PROGRESS" && j.timeLogs.length === 0
+  );
 
-  // Workers currently on general duties, plus running outside-crane clocks.
-  const [dutyLogs, craneLogs, unitWorkers] = await Promise.all([
+  // Second round trip: everything derived from the units/jobs above.
+  const [
+    { offByUnit, onLeaveByUnit },
+    alertsByJob,
+    dutyLogs,
+    craneLogs,
+    unitWorkers,
+    allStageLogs,
+    lastEnded,
+  ] = await Promise.all([
+    // Off today: present yesterday, nothing today, no leave tick.
+    buildOffList(units.map((u) => u.id)),
+    // What's wrong on each job — the red strip on its card. Never let this
+    // take the dashboard down: the shop floor needs the board more than the strip.
+    jobAlerts(jobs.map((j) => j.id)).catch((e) => {
+      console.error("job alerts failed:", e);
+      return new Map<string, { alerts: { severity: string; text: string; days: number }[]; lateCount: number; todoCount: number }>();
+    }),
+    // Workers currently on general duties, plus running outside-crane clocks.
     db.timeLog.findMany({
       where: {
         endedAt: null,
@@ -123,14 +136,20 @@ export default async function DashboardPage({
       orderBy: { name: "asc" },
       select: { id: true, name: true, skill: true, primaryUnitId: true },
     }),
+    // Total actively-worked time per stage (all sessions, idle gaps excluded)
+    // so a restarted stage still shows its full running total.
+    db.timeLog.findMany({
+      where: { jobId: { in: jobs.map((j) => j.id) }, stageId: { not: null } },
+      select: { stageId: true, startedAt: true, endedAt: true },
+    }),
+    idleJobs.length
+      ? db.timeLog.groupBy({
+          by: ["jobId"],
+          where: { jobId: { in: idleJobs.map((j) => j.id) } },
+          _max: { endedAt: true },
+        })
+      : Promise.resolve([]),
   ]);
-
-  // Total actively-worked time per stage (all sessions, idle gaps excluded)
-  // so a restarted stage still shows its full running total.
-  const allStageLogs = await db.timeLog.findMany({
-    where: { jobId: { in: jobs.map((j) => j.id) }, stageId: { not: null } },
-    select: { stageId: true, startedAt: true, endedAt: true },
-  });
   const stageWorked = workedByStage(allStageLogs);
 
   const activeWorkerCount = new Set([
@@ -138,19 +157,6 @@ export default async function DashboardPage({
     ...dutyLogs.map((l) => l.employeeId),
   ]).size;
   const openIssueCount = jobs.reduce((n, j) => n + j.issues.length, 0);
-
-  // Jobs in progress with nobody clocked on = idle right now. "Since" is the
-  // last time anyone stopped work (or the active stage start if never worked).
-  const idleJobs = jobs.filter(
-    (j) => j.status === "IN_PROGRESS" && j.timeLogs.length === 0
-  );
-  const lastEnded = idleJobs.length
-    ? await db.timeLog.groupBy({
-        by: ["jobId"],
-        where: { jobId: { in: idleJobs.map((j) => j.id) } },
-        _max: { endedAt: true },
-      })
-    : [];
   const idleSince = new Map<string, Date>();
   for (const job of idleJobs) {
     const ended = lastEnded.find((g) => g.jobId === job.id)?._max.endedAt;

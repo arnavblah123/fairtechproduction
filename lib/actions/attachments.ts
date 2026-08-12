@@ -73,9 +73,10 @@ export async function deleteAttachment(formData: FormData) {
   const user = await requireUser();
   if (!isAdmin(user)) throw new Error("Only admins can delete documents.");
   const attachmentId = String(formData.get("attachmentId") ?? "");
+  // Explicit select — never drag the file bytes into Node just to delete a row.
   const attachment = await db.jobAttachment.findUniqueOrThrow({
     where: { id: attachmentId },
-    include: { job: true },
+    select: { jobId: true, filename: true, job: { select: { unitId: true } } },
   });
   assertUnitAccess(user, attachment.job.unitId);
   await db.jobAttachment.delete({ where: { id: attachmentId } });

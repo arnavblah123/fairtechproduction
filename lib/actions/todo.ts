@@ -128,19 +128,16 @@ export async function copyDrawings(formData: FormData) {
   assertUnitAccess(user, to.unitId);
   const drawings = await db.jobAttachment.findMany({
     where: { jobId: fromJobId, kind: "DRAWING" },
+    select: { id: true, filename: true },
   });
   if (drawings.length === 0) return;
-  await db.jobAttachment.createMany({
-    data: drawings.map((d) => ({
-      jobId: toJobId,
-      kind: d.kind,
-      filename: d.filename,
-      mimeType: d.mimeType,
-      size: d.size,
-      data: d.data,
-      uploadedById: user.id,
-    })),
-  });
+  // Copy inside Postgres — the drawing bytes never travel to the app server.
+  await db.$executeRaw`
+    INSERT INTO "JobAttachment"
+      ("id", "jobId", "kind", "filename", "mimeType", "size", "data", "uploadedById")
+    SELECT gen_random_uuid()::text, ${toJobId}, "kind", "filename", "mimeType", "size", "data", ${user.id}
+    FROM "JobAttachment"
+    WHERE "jobId" = ${fromJobId} AND "kind" = 'DRAWING'::"AttachmentKind"`;
   await audit(user.id, "job.copyDrawings", "Job", toJobId, {
     fromJobId,
     files: drawings.map((d) => d.filename),

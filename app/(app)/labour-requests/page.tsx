@@ -4,6 +4,7 @@ import { requireRole, unitScope } from "@/lib/permissions";
 import { raiseIssue, resolveIssue } from "@/lib/actions/issues";
 import { IssueBadge } from "@/components/badges";
 import { SearchSelect } from "@/components/search-select";
+import { ActionButton, PendingSubmit } from "@/components/instant";
 import { formatDate, formatDateTime, jobCode } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -90,9 +91,12 @@ export default async function LabourRequestsPage({
                     style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                   />
                 </div>
-                <button className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700">
+                <PendingSubmit
+                  className="rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-60"
+                  busy="Sending…"
+                >
                   Send request
-                </button>
+                </PendingSubmit>
               </div>
               <p className="text-xs text-slate-400">
                 Alerts Jagdish and the owner on WhatsApp right away, and stays listed here — and
@@ -142,12 +146,14 @@ export default async function LabourRequestsPage({
               </p>
             </div>
             {issue.status === "OPEN" && (
-              <form action={resolveIssue}>
-                <input type="hidden" name="issueId" value={issue.id} />
-                <button className="rounded-lg bg-green-100 text-green-800 hover:bg-green-200 px-3 py-1.5 text-sm font-medium">
-                  Mark fulfilled
-                </button>
-              </form>
+              <ActionButton
+                action={resolveIssue}
+                fields={{ issueId: issue.id }}
+                className="rounded-lg bg-green-100 text-green-800 hover:bg-green-200 px-3 py-1.5 text-sm font-medium disabled:opacity-60"
+                optimistic="✓ Fulfilled"
+              >
+                Mark fulfilled
+              </ActionButton>
             )}
           </div>
         ))}

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireUser, unitScope, allowPurchaseHr} from "@/lib/permissions";
 import { resolveIssue } from "@/lib/actions/issues";
 import { IssueBadge } from "@/components/badges";
+import { ActionButton } from "@/components/instant";
 import { formatDate, formatDateTime, jobCode } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -79,12 +80,14 @@ export default async function IssuesPage({
               </p>
             </div>
             {issue.status === "OPEN" && (
-              <form action={resolveIssue}>
-                <input type="hidden" name="issueId" value={issue.id} />
-                <button className="rounded-lg bg-green-100 text-green-800 hover:bg-green-200 px-3 py-1.5 text-sm font-medium">
-                  Resolve
-                </button>
-              </form>
+              <ActionButton
+                action={resolveIssue}
+                fields={{ issueId: issue.id }}
+                className="rounded-lg bg-green-100 text-green-800 hover:bg-green-200 px-3 py-1.5 text-sm font-medium disabled:opacity-60"
+                optimistic="✓ Resolved"
+              >
+                Resolve
+              </ActionButton>
             )}
           </div>
         ))}
