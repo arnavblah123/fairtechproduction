@@ -80,24 +80,29 @@ export async function GET() {
   checks.missingSchema = missing;
 
   // 4. Environment switches the app depends on (names only, never values).
+  //    SESSION_SECRET is the one that signs login cookies — without it the
+  //    app refuses to start in production (lib/session-token.ts).
   checks.env = {
     DATABASE_URL: !!process.env.DATABASE_URL,
     DIRECT_URL: !!process.env.DIRECT_URL,
-    JWT_SECRET: !!process.env.JWT_SECRET,
+    SESSION_SECRET: !!process.env.SESSION_SECRET,
     INTEGRATION_EXPORT_KEY: !!process.env.INTEGRATION_EXPORT_KEY,
     whatsapp: !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID),
     smtp: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
   };
 
-  const ok = missing.length === 0 && !checks.failedMigrations;
+  const noSecret = !process.env.SESSION_SECRET;
+  const ok = missing.length === 0 && !checks.failedMigrations && !noSecret;
   return NextResponse.json(
     {
       ok,
       problem: ok
         ? null
-        : missing.length
-          ? "The database is missing columns this version of the app needs — its migrations did not run. Redeploy on Vercel so the build applies them."
-          : "A database migration is stuck half-applied. Tell Claude the failed migration name.",
+        : noSecret
+          ? "SESSION_SECRET is not set — login cookies would be forgeable. Add it in Vercel's environment variables (any long random string) and redeploy."
+          : missing.length
+            ? "The database is missing columns this version of the app needs — its migrations did not run. Redeploy on Vercel so the build applies them."
+            : "A database migration is stuck half-applied. Tell Claude the failed migration name.",
       ...checks,
     },
     { status: ok ? 200 : 503 }
