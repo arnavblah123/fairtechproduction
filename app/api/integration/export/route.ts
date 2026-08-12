@@ -24,6 +24,13 @@ export async function GET(req: NextRequest) {
     orderBy: { jobNumber: "asc" },
   });
 
+  // Tentative future jobs — the purchase app mirrors these so planners see
+  // what is coming before it even has a job number.
+  const futureJobs = await prisma.futureJob.findMany({
+    include: { unit: { select: { code: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+
   // Sum ended time-log hours per job per month (IST) — open logs are excluded
   // until they end, so numbers only ever grow monotonically.
   const logs = await prisma.timeLog.findMany({
@@ -95,6 +102,18 @@ export async function GET(req: NextRequest) {
       unitCode: j.unit.code,
       status: j.status,
       completedAt: j.completedAt,
+      // Used by the purchase app to show due dates against material planning.
+      expectedCompletion: j.expectedCompletion,
+      buyerName: j.buyerName,
+      priority: j.priority,
+    })),
+    futureJobs: futureJobs.map((f) => ({
+      id: f.id,
+      clientName: f.clientName,
+      description: f.description,
+      unitCode: f.unit?.code ?? null,
+      expectedStart: f.expectedStart,
+      notes: f.notes,
     })),
     hours: [...agg.entries()].map(([k, hours]) => {
       const [jobNumber, month] = k.split("|");
