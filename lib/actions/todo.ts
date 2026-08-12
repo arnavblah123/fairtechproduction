@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireUser, requireRole, isAdmin, assertUnitAccess } from "@/lib/permissions";
@@ -24,9 +25,11 @@ export async function addOwnerTodo(formData: FormData) {
 }
 
 export async function toggleTodoDone(formData: FormData) {
-  const user = await requireUser();
   const itemId = String(formData.get("itemId") ?? "");
-  const item = await db.todoItem.findUniqueOrThrow({ where: { id: itemId } });
+  const [user, item] = await Promise.all([
+    requireUser(),
+    db.todoItem.findUniqueOrThrow({ where: { id: itemId } }),
+  ]);
   if (item.unitId) assertUnitAccess(user, item.unitId);
   await db.todoItem.update({
     where: { id: itemId },
@@ -34,7 +37,11 @@ export async function toggleTodoDone(formData: FormData) {
       ? { done: false, doneBy: null, doneAt: null }
       : { done: true, doneBy: user.name, doneAt: new Date() },
   });
-  await audit(user.id, item.done ? "todo.undo" : "todo.done", "TodoItem", itemId);
+  after(() =>
+    audit(user.id, item.done ? "todo.undo" : "todo.done", "TodoItem", itemId).catch((e) =>
+      console.error("audit failed:", e)
+    )
+  );
   revalidatePath("/todo");
 }
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { after } from "next/server";
 import { db } from "@/lib/db";
 import { requireUser, unitScope, lockHrToLabour} from "@/lib/permissions";
 import {
@@ -48,8 +49,10 @@ export default async function DashboardPage({
     await searchParams;
 
   // Lazy sweep: stop any clock whose night-plan cutoff has passed (the
-  // scheduled cron also does this at 10 PM / 2:30 AM).
-  await closeOverdueShifts();
+  // scheduled cron also does this at 10 PM / 2:30 AM). Runs after the
+  // response — the cron is the real closer; this backup must not sit in
+  // the critical path of every dashboard render.
+  after(() => closeOverdueShifts().catch((e) => console.error("shift sweep failed:", e)));
 
   // First round trip: everything that depends only on the user/filters.
   const [units, todayPunch, todoData, jobs] = await Promise.all([

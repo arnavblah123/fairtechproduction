@@ -2,11 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireUser, assertUnitAccess, isAdmin } from "@/lib/permissions";
 import { handOverItem } from "@/lib/inventory";
 import type { StageStatus } from "@prisma/client";
+
+// Best-effort audit that runs after the response has been sent — the click
+// must never wait on the history table.
+function auditAfter(...args: Parameters<typeof audit>) {
+  after(() => audit(...args).catch((e) => console.error("audit failed:", e)));
+}
 
 function revalidateJob(jobId: string) {
   revalidatePath(`/jobs/${jobId}`);
@@ -17,16 +24,16 @@ function revalidateJob(jobId: string) {
 // Start / pause / resume a stage. Completing goes through completeStage()
 // so the quality-check inspector is always recorded.
 export async function setStageStatus(formData: FormData) {
-  const user = await requireUser();
   const stageId = String(formData.get("stageId") ?? "");
   const status = String(formData.get("status") ?? "") as StageStatus;
   if (status === "DONE") {
     throw new Error("Completing a stage requires the inspector's name.");
   }
-  const stage = await db.stage.findUniqueOrThrow({
-    where: { id: stageId },
-    include: { job: true },
-  });
+  // The user lookup and the stage read don't depend on each other.
+  const [user, stage] = await Promise.all([
+    requireUser(),
+    db.stage.findUniqueOrThrow({ where: { id: stageId }, include: { job: true } }),
+  ]);
   assertUnitAccess(user, stage.job.unitId);
 
   // Optional task due date, offered when starting a stage. Write-once for
@@ -36,9 +43,20 @@ export async function setStageStatus(formData: FormData) {
   const mayWriteDue =
     dueAt && !isNaN(dueAt.getTime()) && (stage.dueAt === null || isAdmin(user));
 
-  const stoppedEmployeeIds: string[] = [];
-  await db.$transaction(async (tx) => {
-    await tx.stage.update({
+  // Who is clocked on right now — needed only for the "where are they
+  // shifting?" prompt; the close itself is a single set-based UPDATE.
+  const pausing = status === "PAUSED" || status === "PENDING";
+  const open = pausing
+    ? await db.timeLog.findMany({
+        where: { stageId, endedAt: null },
+        select: { employeeId: true },
+      })
+    : [];
+  const stoppedEmployeeIds = open.map((l) => l.employeeId);
+
+  const firstStart = status === "ACTIVE" && stage.job.status === "NOT_STARTED";
+  await db.$transaction([
+    db.stage.update({
       where: { id: stageId },
       data: {
         status,
@@ -46,28 +64,25 @@ export async function setStageStatus(formData: FormData) {
         completedAt: null,
         ...(mayWriteDue ? { dueAt } : {}),
       },
-    });
-
+    }),
     // Pausing or resetting a stage stops the clock for everyone on it.
-    if (status === "PAUSED" || status === "PENDING") {
-      const open = await tx.timeLog.findMany({ where: { stageId, endedAt: null } });
-      for (const log of open) {
-        await tx.timeLog.update({
-          where: { id: log.id },
-          data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
-        });
-        stoppedEmployeeIds.push(log.employeeId);
-      }
-    }
-
+    ...(pausing
+      ? [
+          db.timeLog.updateMany({
+            where: { stageId, endedAt: null },
+            data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
+          }),
+        ]
+      : []),
     // First stage starting moves the job to In Progress.
-    if (status === "ACTIVE" && stage.job.status === "NOT_STARTED") {
-      await tx.job.update({ where: { id: stage.jobId }, data: { status: "IN_PROGRESS" } });
-      await audit(user.id, "job.status", "Job", stage.jobId, { status: "IN_PROGRESS", trigger: "first stage started" }, tx);
-    }
-
-    await audit(user.id, "stage.status", "Stage", stageId, { status, jobId: stage.jobId }, tx);
-  });
+    ...(firstStart
+      ? [db.job.update({ where: { id: stage.jobId }, data: { status: "IN_PROGRESS" } })]
+      : []),
+  ]);
+  if (firstStart) {
+    auditAfter(user.id, "job.status", "Job", stage.jobId, { status: "IN_PROGRESS", trigger: "first stage started" });
+  }
+  auditAfter(user.id, "stage.status", "Stage", stageId, { status, jobId: stage.jobId });
   revalidateJob(stage.jobId);
   // Pausing freed up workers — ask where they're going now.
   if (status === "PAUSED" && stoppedEmployeeIds.length > 0) {
@@ -79,58 +94,62 @@ export async function setStageStatus(formData: FormData) {
 // first (a worker can only be clocked on one stage at a time — reassignment
 // mid-stage is exactly this).
 export async function assignWorker(formData: FormData) {
-  const user = await requireUser();
   const stageId = String(formData.get("stageId") ?? "");
   const employeeId = String(formData.get("employeeId") ?? "");
   if (!employeeId) return;
-  const stage = await db.stage.findUniqueOrThrow({
-    where: { id: stageId },
-    include: { job: true },
-  });
-  assertUnitAccess(user, stage.job.unitId);
-  const employee = await db.employee.findUniqueOrThrow({ where: { id: employeeId } });
-
-  await db.$transaction(async (tx) => {
-    const open = await tx.timeLog.findMany({
+  // None of the three reads depend on each other — one round trip.
+  const [user, stage, employee, open] = await Promise.all([
+    requireUser(),
+    db.stage.findUniqueOrThrow({ where: { id: stageId }, include: { job: true } }),
+    db.employee.findUniqueOrThrow({ where: { id: employeeId } }),
+    db.timeLog.findMany({
       where: { employeeId, endedAt: null },
-    });
-    if (open.some((l) => l.stageId === stageId)) return; // already on this stage
-    for (const log of open) {
-      await tx.timeLog.update({
-        where: { id: log.id },
-        data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
-      });
-      await audit(user.id, "timelog.stop", "TimeLog", log.id, { reason: "reassigned", toStageId: stageId }, tx);
-    }
+      select: { id: true, stageId: true },
+    }),
+  ]);
+  assertUnitAccess(user, stage.job.unitId);
+  if (open.some((l) => l.stageId === stageId)) return; // already on this stage
 
-    const newLog = await tx.timeLog.create({
-      data: {
-        employeeId,
-        jobId: stage.jobId,
-        stageId,
-        unitId: stage.job.unitId,
-        startSource: "MANUAL",
-        startedById: user.id,
-      },
-    });
-
-    // Assigning to a pending/paused stage activates it.
-    if (stage.status === "PENDING" || stage.status === "PAUSED") {
-      await tx.stage.update({
-        where: { id: stageId },
-        data: { status: "ACTIVE", startedAt: stage.startedAt ?? new Date() },
-      });
-      if (stage.job.status === "NOT_STARTED") {
-        await tx.job.update({ where: { id: stage.jobId }, data: { status: "IN_PROGRESS" } });
-      }
-    }
-
-    await audit(user.id, "timelog.assign", "TimeLog", newLog.id, {
+  const activate = stage.status === "PENDING" || stage.status === "PAUSED";
+  const newLogPromise = db.timeLog.create({
+    data: {
       employeeId,
-      employeeCode: employee.code,
-      stageId,
       jobId: stage.jobId,
-    }, tx);
+      stageId,
+      unitId: stage.job.unitId,
+      startSource: "MANUAL",
+      startedById: user.id,
+    },
+  });
+  await db.$transaction([
+    // A worker can only be clocked on one stage at a time — close the rest.
+    db.timeLog.updateMany({
+      where: { employeeId, endedAt: null },
+      data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
+    }),
+    newLogPromise,
+    // Assigning to a pending/paused stage activates it.
+    ...(activate
+      ? [
+          db.stage.update({
+            where: { id: stageId },
+            data: { status: "ACTIVE", startedAt: stage.startedAt ?? new Date() },
+          }),
+        ]
+      : []),
+    ...(activate && stage.job.status === "NOT_STARTED"
+      ? [db.job.update({ where: { id: stage.jobId }, data: { status: "IN_PROGRESS" } })]
+      : []),
+  ]);
+  const newLog = await newLogPromise;
+  for (const log of open) {
+    auditAfter(user.id, "timelog.stop", "TimeLog", log.id, { reason: "reassigned", toStageId: stageId });
+  }
+  auditAfter(user.id, "timelog.assign", "TimeLog", newLog.id, {
+    employeeId,
+    employeeCode: employee.code,
+    stageId,
+    jobId: stage.jobId,
   });
   revalidateJob(stage.jobId);
   revalidatePath("/employees");
@@ -139,16 +158,18 @@ export async function assignWorker(formData: FormData) {
 // Stop one worker's clock (stage work or general duty) without touching
 // the stage status.
 export async function stopWorker(formData: FormData) {
-  const user = await requireUser();
   const timeLogId = String(formData.get("timeLogId") ?? "");
-  const log = await db.timeLog.findUniqueOrThrow({ where: { id: timeLogId } });
+  const [user, log] = await Promise.all([
+    requireUser(),
+    db.timeLog.findUniqueOrThrow({ where: { id: timeLogId } }),
+  ]);
   assertUnitAccess(user, log.unitId);
   if (log.endedAt) return;
   await db.timeLog.update({
     where: { id: timeLogId },
     data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
   });
-  await audit(user.id, "timelog.stop", "TimeLog", timeLogId, { reason: "manual stop" });
+  auditAfter(user.id, "timelog.stop", "TimeLog", timeLogId, { reason: "manual stop" });
   if (log.jobId) revalidateJob(log.jobId);
   revalidatePath("/");
   revalidatePath("/employees");
@@ -237,20 +258,25 @@ export async function setStageDue(formData: FormData) {
 // Complete a stage — the quality check. The name of whoever inspected/
 // checked the work is compulsory and stored on the stage.
 export async function completeStage(formData: FormData) {
-  const user = await requireUser();
   const stageId = String(formData.get("stageId") ?? "");
   const inspectedBy = String(formData.get("inspectedBy") ?? "").trim();
   if (!inspectedBy) return;
-  const stage = await db.stage.findUniqueOrThrow({
-    where: { id: stageId },
-    include: { job: true },
-  });
+  const [user, stage] = await Promise.all([
+    requireUser(),
+    db.stage.findUniqueOrThrow({ where: { id: stageId }, include: { job: true } }),
+  ]);
   assertUnitAccess(user, stage.job.unitId);
   if (stage.job.status === "COMPLETED") return;
 
-  const stoppedEmployeeIds: string[] = [];
-  await db.$transaction(async (tx) => {
-    await tx.stage.update({
+  // Who was clocked on — for the "where are they shifting?" prompt only.
+  const open = await db.timeLog.findMany({
+    where: { stageId, endedAt: null },
+    select: { employeeId: true },
+  });
+  const stoppedEmployeeIds = open.map((l) => l.employeeId);
+
+  await db.$transaction([
+    db.stage.update({
       where: { id: stageId },
       data: {
         status: "DONE",
@@ -258,19 +284,15 @@ export async function completeStage(formData: FormData) {
         inspectedBy,
         inspectedAt: new Date(),
       },
-    });
-    const open = await tx.timeLog.findMany({ where: { stageId, endedAt: null } });
-    for (const log of open) {
-      await tx.timeLog.update({
-        where: { id: log.id },
-        data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
-      });
-      stoppedEmployeeIds.push(log.employeeId);
-    }
-    await audit(user.id, "stage.done", "Stage", stageId, {
-      jobId: stage.jobId,
-      inspectedBy,
-    }, tx);
+    }),
+    db.timeLog.updateMany({
+      where: { stageId, endedAt: null },
+      data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
+    }),
+  ]);
+  auditAfter(user.id, "stage.done", "Stage", stageId, {
+    jobId: stage.jobId,
+    inspectedBy,
   });
   revalidateJob(stage.jobId);
   // The stage's workers are free now — ask where each one is going.

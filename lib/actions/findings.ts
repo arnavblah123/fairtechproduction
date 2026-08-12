@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireUser } from "@/lib/permissions";
@@ -14,6 +15,10 @@ export async function acknowledgeFinding(formData: FormData) {
     where: { id: findingId },
     data: { acknowledged: true },
   });
-  await audit(user.id, "finding.acknowledge", "DailyFinding", findingId);
+  after(() =>
+    audit(user.id, "finding.acknowledge", "DailyFinding", findingId).catch((e) =>
+      console.error("audit failed:", e)
+    )
+  );
   revalidatePath("/");
 }

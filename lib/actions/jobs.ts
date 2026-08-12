@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { requireUser, isAdmin, assertUnitAccess } from "@/lib/permissions";
@@ -381,10 +382,12 @@ export async function setJobWeight(formData: FormData) {
 }
 
 export async function setJobStatus(formData: FormData) {
-  const user = await requireUser();
   const jobId = String(formData.get("jobId") ?? "");
   const status = String(formData.get("status") ?? "") as JobStatus;
-  const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
+  const [user, job] = await Promise.all([
+    requireUser(),
+    db.job.findUniqueOrThrow({ where: { id: jobId } }),
+  ]);
   assertUnitAccess(user, job.unitId);
   // Supervisors may move jobs between In Progress / On Hold; only admins may
   // complete or reset a job.
@@ -392,27 +395,34 @@ export async function setJobStatus(formData: FormData) {
     throw new Error("Only admins can complete or reset a job.");
   }
 
-  await db.$transaction(async (tx) => {
-    await tx.job.update({
+  await db.$transaction([
+    db.job.update({
       where: { id: jobId },
       data: {
         status,
         completedAt: status === "COMPLETED" ? new Date() : null,
       },
-    });
-    if (status === "COMPLETED") {
-      // Close any still-open time logs on this job.
-      const open = await tx.timeLog.findMany({ where: { jobId, endedAt: null } });
-      for (const log of open) {
-        await tx.timeLog.update({
-          where: { id: log.id },
-          data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
-        });
-      }
-    }
-    await audit(user.id, "job.status", "Job", jobId, { status }, tx);
-  });
-  await syncJobToCalendar(jobId); // completing a job removes its calendar event
+    }),
+    // Completing closes any still-open time logs on this job.
+    ...(status === "COMPLETED"
+      ? [
+          db.timeLog.updateMany({
+            where: { jobId, endedAt: null },
+            data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
+          }),
+        ]
+      : []),
+  ]);
+  // History write and the Google Calendar round trip both happen after the
+  // response — the click never waits on either.
+  after(() =>
+    audit(user.id, "job.status", "Job", jobId, { status }).catch((e) =>
+      console.error("audit failed:", e)
+    )
+  );
+  after(() =>
+    syncJobToCalendar(jobId).catch((e) => console.error("calendar sync failed:", e))
+  );
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/jobs");
   revalidatePath("/");
