@@ -13,6 +13,7 @@ import {
 } from "@/lib/actions/todo";
 import { stopWorker } from "@/lib/actions/stages";
 import { TodoTick } from "@/components/todo-tick";
+import { QuickDrawingUpload } from "@/components/quick-drawing-upload";
 import { formatDate, formatDateTime, jobCode } from "@/lib/format";
 import { LiveDuration } from "@/components/live-duration";
 import { SearchSelect } from "@/components/search-select";
@@ -218,22 +219,19 @@ export default async function TodoPage() {
               <Link href={`/jobs/${j.id}`} className="flex-1 min-w-0 font-medium hover:underline">
                 {jobLabel(j)} <span className="text-slate-500 font-normal">· {j.clientName}</span>
               </Link>
-              {src && src.id !== j.id ? (
+              {src && src.id !== j.id && (
                 <form action={copyDrawings}>
                   <input type="hidden" name="fromJobId" value={src.id} />
                   <input type="hidden" name="toJobId" value={j.id} />
                   <button
-                    className="rounded bg-blue-600 text-white px-2.5 py-1 text-xs font-medium"
+                    className="rounded bg-slate-700 text-white px-2.5 py-1 text-xs font-medium"
                     title="Same job name — usually the same drawings. Confirm to copy them across."
                   >
                     Same as {jobCode(src.jobNumber)}? Copy ✓
                   </button>
                 </form>
-              ) : (
-                <Link href={`/jobs/${j.id}`} className="text-xs text-blue-700 hover:underline">
-                  Upload on job page →
-                </Link>
               )}
+              <QuickDrawingUpload jobId={j.id} />
             </div>
           );
         })}
