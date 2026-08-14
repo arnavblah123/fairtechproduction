@@ -24,13 +24,13 @@ export default async function MorePage() {
     { href: "/planning", label: "Production Planning", icon: "🗓️" },
     { href: "/calendar", label: "Job Work Calendar", icon: "📅" },
     ...(user.role === "SUPERADMIN" ? [{ href: "/labour", label: "Labour App", icon: "💼" }] : []),
-    ...(user.role === "SUPERADMIN"
-      ? [{
-          href: process.env.CONSUMABLES_URL ?? "https://fairtechconsumablesystem.vercel.app",
-          label: "Consumables Store",
-          icon: "🛒",
-        }]
-      : []),
+    // Supervisors run the store day to day — issuing, inward, everything —
+    // so the link is for every production role. Same Store login as always.
+    {
+      href: process.env.CONSUMABLES_URL ?? "https://fairtechconsumablesystem.vercel.app",
+      label: "Consumables Store",
+      icon: "🛒",
+    },
     { href: "/history", label: "Completed Job History", icon: "📊" },
     { href: "/discipline", label: "Discipline Register", icon: "⚠️" },
     ...(isAdmin ? [{ href: "/templates", label: "Process Templates", icon: "📋" }] : []),

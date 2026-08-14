@@ -13,8 +13,11 @@ export default async function AppLayout({
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
   const isHr = user.role === "HR";
   const isPurchaseHr = user.role === "PURCHASE_HR";
-  // Fairtech Store (consumables app) — its own Vercel deployment; owner-only
-  // link. Override the URL with CONSUMABLES_URL if the project name differs.
+  // Fairtech Store (consumables app) — its own Vercel deployment, its own
+  // login. Supervisors run the store day to day (issuing, inward, all of
+  // it), so every production role gets the link; it is just a link, the
+  // Store app's own accounts decide what they can do there. Override the
+  // URL with CONSUMABLES_URL if the project name differs.
   const storeUrl =
     process.env.CONSUMABLES_URL ?? "https://fairtechconsumablesystem.vercel.app";
 
@@ -45,7 +48,7 @@ export default async function AppLayout({
         { href: "/calendar", label: "Calendar" },
         ...(user.role === "SUPERADMIN" ? [{ href: "/assistant", label: "Assistant" }] : []),
         ...(user.role === "SUPERADMIN" ? [{ href: "/labour", label: "Labour" }] : []),
-        ...(user.role === "SUPERADMIN" ? [{ href: storeUrl, label: "Store" }] : []),
+        { href: storeUrl, label: "Store" },
         { href: "/history", label: "History" },
         { href: "/discipline", label: "Discipline" },
         { href: "/attendance", label: "Attendance" },
