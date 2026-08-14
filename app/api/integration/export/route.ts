@@ -31,6 +31,17 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "asc" },
   });
 
+  // Job issues — the purchase app surfaces these (material shortages above
+  // all) instead of the retired WhatsApp alerts, so nothing is silently lost.
+  const issues = await prisma.issue.findMany({
+    include: {
+      job: { select: { jobNumber: true } },
+      unit: { select: { code: true } },
+      raisedBy: { select: { name: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
   // Sum ended time-log hours per job per month (IST) — open logs are excluded
   // until they end, so numbers only ever grow monotonically.
   const logs = await prisma.timeLog.findMany({
@@ -114,6 +125,18 @@ export async function GET(req: NextRequest) {
       unitCode: f.unit?.code ?? null,
       expectedStart: f.expectedStart,
       notes: f.notes,
+    })),
+    issues: issues.map((i) => ({
+      id: i.id,
+      jobNumber: i.job.jobNumber,
+      unitCode: i.unit.code,
+      type: i.type,
+      description: i.description,
+      dueAt: i.dueAt,
+      status: i.status,
+      raisedBy: i.raisedBy.name,
+      raisedAt: i.createdAt,
+      resolvedAt: i.resolvedAt,
     })),
     hours: [...agg.entries()].map(([k, hours]) => {
       const [jobNumber, month] = k.split("|");
