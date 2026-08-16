@@ -10,6 +10,7 @@ const BASE_TABS = [
   { href: "/jobs", label: "Jobs", icon: "🗂️" },
   { href: "/planning", label: "Planning", icon: "🗓️" },
   { href: "/todo", label: "To-Do", icon: "📋" },
+  { href: "/order-book", label: "Orders", icon: "📒" },
   { href: "/more", label: "More", icon: "☰" },
 ];
 
@@ -17,11 +18,14 @@ const BASE_TABS = [
 // never handed the flag for anyone but the owner, so the tab cannot appear.
 export function MobileNav({ showAssistant = false }: { showAssistant?: boolean }) {
   const pathname = usePathname();
+  // Ask sits immediately before More, wherever More happens to be — found by
+  // name so adding a tab above never silently moves it.
+  const moreAt = BASE_TABS.findIndex((t) => t.href === "/more");
   const tabs = showAssistant
     ? [
-        ...BASE_TABS.slice(0, 4),
+        ...BASE_TABS.slice(0, moreAt),
         { href: "/assistant", label: "Ask", icon: "🤖" },
-        ...BASE_TABS.slice(4),
+        ...BASE_TABS.slice(moreAt),
       ]
     : BASE_TABS;
   return (

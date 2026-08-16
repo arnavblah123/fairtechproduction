@@ -40,6 +40,7 @@ export default async function AppLayout({
         { href: "/", label: "Dashboard" },
         { href: "/jobs", label: "Jobs" },
         { href: "/todo", label: "To-Do" },
+        { href: "/order-book", label: "Order Book" },
         { href: "/labour-requests", label: "Labour Request" },
         ...(isAdmin ? [{ href: "/templates", label: "Templates" }] : []),
         { href: "/employees", label: "Employees" },
