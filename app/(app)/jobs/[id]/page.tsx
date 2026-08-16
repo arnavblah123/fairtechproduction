@@ -2,7 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, canAccessUnit, isAdmin, lockHrToLabour} from "@/lib/permissions";
-import { setJobStatus, deleteJob, finalDone, setJobWeight } from "@/lib/actions/jobs";
+import {
+  setJobStatus,
+  deleteJob,
+  finalDone,
+  setJobWeight,
+  undoFinalDone,
+  reopenJob,
+} from "@/lib/actions/jobs";
 import { setStageStatus, completeStage, assignWorker, stopWorker, addStage, recordRework, setShiftPlan, setStageDue } from "@/lib/actions/stages";
 import { shiftPlanLabel } from "@/lib/shift";
 import { heldItems } from "@/lib/inventory";
@@ -850,6 +857,29 @@ export default async function JobPage({
                   )}
                 </form>
               </details>
+            )}
+            {/* Pressed by mistake? Admins can walk either step back. */}
+            {admin && job.status === "READY_TO_DISPATCH" && (
+              <ActionButton
+                action={undoFinalDone}
+                fields={{ jobId: job.id }}
+                className={`${btn} bg-slate-100 text-slate-700 hover:bg-slate-200`}
+                optimistic="↩ Undoing…"
+                title="Marked Ready to Dispatch by mistake — sends the job back to In Progress and clears the dispatch date"
+              >
+                ↩ Undo Ready to Dispatch
+              </ActionButton>
+            )}
+            {admin && job.status === "COMPLETED" && (
+              <ActionButton
+                action={reopenJob}
+                fields={{ jobId: job.id }}
+                className={`${btn} bg-slate-100 text-slate-700 hover:bg-slate-200`}
+                optimistic="↩ Reopening…"
+                title="Dispatched by mistake — reopens the job into Ready to Dispatch; it leaves History"
+              >
+                ↩ Reopen job
+              </ActionButton>
             )}
             {admin && (
               <Link href={`/jobs/${job.id}/edit`} className={`${btn} bg-slate-100 hover:bg-slate-200`}>

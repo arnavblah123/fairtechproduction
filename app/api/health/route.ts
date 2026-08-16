@@ -9,6 +9,17 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const checks: Record<string, unknown> = { checkedAt: new Date().toISOString() };
 
+  // 0. Which version of the code is actually live? "My change isn't there"
+  //    is almost always a deploy that never ran, not a bug — this says, in
+  //    one line, which commit the running app was built from. Vercel sets
+  //    these on every build; locally they are simply absent.
+  checks.deployed = {
+    commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "unknown (not a Vercel build)",
+    message: process.env.VERCEL_GIT_COMMIT_MESSAGE?.split("\n")[0] ?? null,
+    branch: process.env.VERCEL_GIT_COMMIT_REF ?? null,
+    environment: process.env.VERCEL_ENV ?? null,
+  };
+
   // 1. Can we reach the database at all?
   try {
     await db.$queryRaw`SELECT 1`;

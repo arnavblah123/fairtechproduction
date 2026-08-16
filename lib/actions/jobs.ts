@@ -483,6 +483,62 @@ export async function finalDone(formData: FormData) {
   }
 }
 
+// Undo a Final Done pressed by mistake: pull the job back out of Ready to
+// Dispatch and put it where it was — In Progress, with the estimated
+// dispatch date cleared. Admin-only, because the supervisor who pressed it
+// is the one being corrected. Clocks stopped by the Final Done stay
+// stopped; workers are put back on their stages the normal way.
+export async function undoFinalDone(formData: FormData) {
+  const user = await requireUser();
+  const jobId = String(formData.get("jobId") ?? "");
+  const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
+  assertUnitAccess(user, job.unitId);
+  if (!isAdmin(user)) {
+    throw new Error("Only admins can take a job out of Ready to Dispatch.");
+  }
+  if (job.status !== "READY_TO_DISPATCH") {
+    throw new Error("This job is not in Ready to Dispatch.");
+  }
+
+  await db.job.update({
+    where: { id: jobId },
+    data: { status: "IN_PROGRESS", estimatedDispatchAt: null },
+  });
+  await audit(user.id, "job.undoFinalDone", "Job", jobId, {
+    from: "READY_TO_DISPATCH",
+    to: "IN_PROGRESS",
+  });
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/jobs");
+  revalidatePath("/");
+}
+
+// Undo a Dispatched ✓ pressed by mistake: reopen the completed job back
+// into Ready to Dispatch so it shows on the dashboard again. The PO value
+// is kept — the dispatch form prefills it — and completedAt is cleared so
+// the job leaves History. Admin-only, same as Mark Completed.
+export async function reopenJob(formData: FormData) {
+  const user = await requireUser();
+  const jobId = String(formData.get("jobId") ?? "");
+  const job = await db.job.findUniqueOrThrow({ where: { id: jobId } });
+  assertUnitAccess(user, job.unitId);
+  if (!isAdmin(user)) throw new Error("Only admins can reopen a completed job.");
+  if (job.status !== "COMPLETED") throw new Error("This job is not completed.");
+
+  await db.job.update({
+    where: { id: jobId },
+    data: { status: "READY_TO_DISPATCH", completedAt: null },
+  });
+  await audit(user.id, "job.reopen", "Job", jobId, {
+    from: "COMPLETED",
+    to: "READY_TO_DISPATCH",
+  });
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/jobs");
+  revalidatePath("/history");
+  revalidatePath("/");
+}
+
 export async function deleteJob(formData: FormData) {
   const user = await requireUser();
   if (user.role !== "SUPERADMIN") throw new Error("Only the superadmin can delete jobs.");
