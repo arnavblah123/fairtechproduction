@@ -470,10 +470,11 @@ export default async function PlanningPage() {
 
       {/* Future jobs backlog */}
       <section className="bg-white rounded-xl shadow-sm p-4 space-y-3">
-        <h2 className="font-semibold">Upcoming work (future jobs)</h2>
+        <h2 className="font-semibold">📒 Order Book (upcoming work)</h2>
         <p className="text-xs text-slate-500">
-          Know of work that will start soon? Add it here so it is counted in the
-          next planning. When the PO arrives, create the real job from it.
+          The same list the dashboard shows unit-wise. Add a line here for a
+          quick note, or use <b>New Job → Order book</b> to book an order with
+          its full details. Releasing one carries everything into the job.
         </p>
         <ul className="space-y-1.5">
           {backlog.map((f) => (
@@ -493,10 +494,10 @@ export default async function PlanningPage() {
               <span className="text-[10px] text-slate-400">by {f.addedBy.name}</span>
               <span className="ml-auto flex gap-2">
                 <Link
-                  href={`/jobs/new?client=${encodeURIComponent(f.clientName)}&desc=${encodeURIComponent(f.description)}${f.unitId ? `&unit=${f.unitId}` : ""}`}
+                  href={`/jobs/new?from=${f.id}`}
                   className="text-xs text-blue-700 hover:underline whitespace-nowrap"
                 >
-                  Create job →
+                  Release to production →
                 </Link>
                 {admin && (
                   <form action={deleteFutureJob}>

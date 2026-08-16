@@ -623,17 +623,37 @@ model PlanItem {
 
 // Upcoming work not yet created as a job — supervisors add these so the
 // 10-day planning can account for them.
+// The order book: work the company has taken on but not yet put on the shop
+// floor. Filled in from the same New Job form as a production job — pick
+// "Order book" instead of "Production" — so nothing has to be typed twice
+// when the order is finally released to a unit.
 model FutureJob {
   id            String    @id @default(cuid())
   clientName    String
+  buyerName     String? // the customer's customer, when the order is routed
+  poNumber      String? // PO / enquiry reference the order came in against
   description   String
   unitId        String?
   unit          Unit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
   expectedStart DateTime?
+  // The promised delivery date. Optional here — an order is often booked
+  // before a date is committed — but mandatory once it becomes a job.
+  expectedCompletion DateTime?
+  finishedWeightKg   Float?
+  reminderDaysBefore Int      @default(7)
+  priority           Boolean  @default(false)
+  // Process picked at order time, kept as a plain reference: the template may
+  // be renamed or retired before the order is released, and that must not
+  // block the promotion.
+  templateId         String?
+  // The stage list as typed, one per line — carried straight into the job.
+  stagesText         String?
   notes         String?
   addedById     String
   addedBy       User      @relation("FutureJobAddedBy", fields: [addedById], references: [id])
   createdAt     DateTime  @default(now())
+
+  @@index([unitId])
 }
 
 // ---------- Discipline (hour cuts) ----------

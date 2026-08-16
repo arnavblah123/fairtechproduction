@@ -56,7 +56,7 @@ export default async function DashboardPage({
   after(() => closeOverdueShifts().catch((e) => console.error("shift sweep failed:", e)));
 
   // First round trip: everything that depends only on the user/filters.
-  const [units, todayPunch, todoData, jobs] = await Promise.all([
+  const [units, todayPunch, todoData, jobs, orderBook] = await Promise.all([
     db.unit.findMany({
       where: user.role === "SUPERADMIN" ? {} : { id: { in: user.unitIds } },
       orderBy: { name: "asc" },
@@ -91,6 +91,31 @@ export default async function DashboardPage({
         },
       },
       orderBy: [{ priority: "desc" }, { expectedCompletion: "asc" }],
+    }),
+    // Order book: sold work not yet released to a unit's board. Entries with
+    // no unit yet are kept — they show under "Unit not decided".
+    db.futureJob.findMany({
+      where: {
+        ...(user.role === "SUPERADMIN"
+          ? {}
+          : { OR: [{ unitId: null }, { unitId: { in: user.unitIds } }] }),
+        ...(unitFilter ? { unitId: unitFilter } : {}),
+        ...(clientFilter
+          ? { clientName: { contains: clientFilter, mode: "insensitive" } }
+          : {}),
+      },
+      select: {
+        id: true,
+        clientName: true,
+        description: true,
+        unitId: true,
+        poNumber: true,
+        expectedCompletion: true,
+        priority: true,
+        notes: true,
+        createdAt: true,
+      },
+      orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
     }),
   ]);
   const needsPunch = user.role !== "SUPERADMIN" && !todayPunch && units.length > 0;
@@ -844,6 +869,79 @@ export default async function DashboardPage({
               </section>
             );
           })}
+
+        {/* Order book: sold work, unit-wise, not yet on any board */}
+        <section className="bg-white rounded-xl shadow-sm">
+          <header className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold">📒 Order Book</h2>
+              <p className="text-xs text-slate-500">Booked, not yet in production</p>
+            </div>
+            <span className="text-sm text-slate-500">
+              {orderBook.length} order{orderBook.length === 1 ? "" : "s"}
+            </span>
+          </header>
+          {orderBook.length === 0 ? (
+            <p className="px-4 py-4 text-sm text-slate-400">
+              Nothing booked. Add a job and choose <b>Order book</b> to park work
+              here until a unit is ready for it.
+            </p>
+          ) : (
+            units
+              .filter((u) => !unitFilter || u.id === unitFilter)
+              .map((unit) => ({ unit, orders: orderBook.filter((o) => o.unitId === unit.id) }))
+              .concat(
+                orderBook.some((o) => !o.unitId)
+                  ? [
+                      {
+                        unit: { id: "none", name: "Unit not decided", location: "" } as typeof units[number],
+                        orders: orderBook.filter((o) => !o.unitId),
+                      },
+                    ]
+                  : []
+              )
+              .filter((g) => g.orders.length > 0)
+              .map(({ unit, orders }) => (
+                <div key={unit.id} className="border-t border-slate-100 px-4 py-3 space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                    {unit.name}
+                    <span className="text-slate-400 font-normal"> · {orders.length}</span>
+                  </p>
+                  {orders.map((o) => (
+                    <div key={o.id} className="bg-amber-50 rounded-lg p-2.5 space-y-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium">
+                          {o.priority && <span title="Priority">🔴 </span>}
+                          {o.description}
+                          <span className="text-slate-500 font-normal text-xs ml-1">
+                            {o.clientName}
+                          </span>
+                        </p>
+                        {o.expectedCompletion && (
+                          <span className="text-xs text-amber-800 whitespace-nowrap">
+                            due {formatDate(o.expectedCompletion)}
+                          </span>
+                        )}
+                      </div>
+                      {(o.poNumber || o.notes) && (
+                        <p className="text-[11px] text-slate-500">
+                          {o.poNumber && <>PO {o.poNumber}</>}
+                          {o.poNumber && o.notes && " · "}
+                          {o.notes}
+                        </p>
+                      )}
+                      <Link
+                        href={`/jobs/new?from=${o.id}`}
+                        className="inline-block text-xs font-medium text-blue-700 hover:underline"
+                      >
+                        Release to production →
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              ))
+          )}
+        </section>
       </div>
     </div>
   );

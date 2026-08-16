@@ -40,18 +40,15 @@ export async function createJob(
   // Finished weight in kg — the basis for per-kg budgets.
   const weightRaw = String(formData.get("finishedWeightKg") ?? "").trim();
   const finishedWeightKg = weightRaw ? Number(weightRaw) : null;
+  // Where this goes: straight onto a unit's board, or into the order book to
+  // be released later. Same form either way.
+  const destination = String(formData.get("destination") ?? "PRODUCTION");
+  // Set when the form was opened from an order-book entry — that entry is
+  // removed once the real job exists, so the work is never counted twice.
+  const fromFutureJobId = String(formData.get("fromFutureJobId") ?? "") || null;
 
   if (!clientName || !description || !unitId) {
     return { error: "Client name, description and unit are required." };
-  }
-  if (!materialReady && !materialNote) {
-    return { error: "Material not available — write what material is needed." };
-  }
-  if (!materialReady && !materialNeededByRaw) {
-    return { error: "Material not available — give the date it is needed by." };
-  }
-  if (!expectedCompletionRaw) {
-    return { error: "Expected completion date is mandatory." };
   }
   if (finishedWeightKg !== null && (!isFinite(finishedWeightKg) || finishedWeightKg <= 0)) {
     return { error: "Finished weight must be a number greater than 0." };
@@ -60,6 +57,52 @@ export async function createJob(
     assertUnitAccess(user, unitId);
   } catch {
     return { error: "You do not have access to that unit." };
+  }
+
+  // Order book: the company has taken the order but no unit is building it
+  // yet. Nothing is scheduled, no stages are created and no clock can start,
+  // so the shop-floor questions — material, drawings, testing — are asked
+  // when the order is released, not now. The delivery date is optional here
+  // because orders are routinely booked before one is committed.
+  if (destination === "ORDER_BOOK") {
+    const orderExpected = expectedCompletionRaw ? new Date(expectedCompletionRaw) : null;
+    if (orderExpected && isNaN(orderExpected.getTime())) {
+      return { error: "Expected completion date is invalid." };
+    }
+    const entry = await db.futureJob.create({
+      data: {
+        clientName,
+        buyerName,
+        poNumber,
+        description,
+        unitId,
+        expectedCompletion: orderExpected,
+        finishedWeightKg,
+        reminderDaysBefore: isNaN(reminderDaysBefore) ? 7 : reminderDaysBefore,
+        priority,
+        templateId,
+        stagesText: customStagesRaw.trim() || null,
+        addedById: user.id,
+      },
+    });
+    await audit(user.id, "futureJob.add", "FutureJob", entry.id, {
+      clientName,
+      unitId,
+      via: "job form",
+    });
+    revalidatePath("/");
+    revalidatePath("/planning");
+    redirect("/");
+  }
+
+  if (!materialReady && !materialNote) {
+    return { error: "Material not available — write what material is needed." };
+  }
+  if (!materialReady && !materialNeededByRaw) {
+    return { error: "Material not available — give the date it is needed by." };
+  }
+  if (!expectedCompletionRaw) {
+    return { error: "Expected completion date is mandatory." };
   }
   const expectedCompletion = new Date(expectedCompletionRaw);
   if (isNaN(expectedCompletion.getTime())) {
@@ -232,6 +275,16 @@ export async function createJob(
         jobId: created.id,
         reason: "material not available at job creation",
       }, tx);
+    }
+    // Released from the order book: drop the booking in the same transaction
+    // that creates the job, so the order can never sit in both places.
+    if (fromFutureJobId) {
+      const removed = await tx.futureJob.deleteMany({ where: { id: fromFutureJobId } });
+      if (removed.count > 0) {
+        await audit(user.id, "futureJob.release", "FutureJob", fromFutureJobId, {
+          jobId: created.id,
+        }, tx);
+      }
     }
     await audit(user.id, "job.create", "Job", created.id, {
       clientName,

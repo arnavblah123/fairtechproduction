@@ -7,11 +7,17 @@ export const dynamic = "force-dynamic";
 export default async function NewJobPage({
   searchParams,
 }: {
-  searchParams: Promise<{ client?: string; desc?: string; unit?: string }>;
+  searchParams: Promise<{ client?: string; desc?: string; unit?: string; from?: string }>;
 }) {
   const user = await requireUser();
   lockHrToLabour(user);
-  const { client, desc, unit } = await searchParams;
+  const { client, desc, unit, from } = await searchParams;
+  // ?from=<order book id> — releasing a booked order into production. Every
+  // field it already holds is filled in, and the booking is deleted when the
+  // job is created.
+  const booked = from
+    ? await db.futureJob.findUnique({ where: { id: from } })
+    : null;
   const [units, templates, clients, buyers] = await Promise.all([
     db.unit.findMany({
       where: user.role === "SUPERADMIN" ? {} : { id: { in: user.unitIds } },
@@ -52,8 +58,17 @@ export default async function NewJobPage({
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-xl font-bold mb-4">New Job</h1>
+      <h1 className="text-xl font-bold mb-4">
+        {booked ? "Release Order to Production" : "New Job"}
+      </h1>
+      {booked && (
+        <p className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Booked for <b>{booked.clientName}</b>. Check the details, add drawings,
+          material and testing, and creating the job removes it from the order book.
+        </p>
+      )}
       <JobCreateForm
+        fromFutureJobId={booked?.id}
         units={units.map((u) => ({ id: u.id, name: u.name }))}
         templates={templates.map((t) => ({
           id: t.id,
@@ -64,9 +79,18 @@ export default async function NewJobPage({
         clientNames={clients.map((c) => c.clientName)}
         buyerNames={buyers.map((b) => b.buyerName!).filter(Boolean)}
         prefill={{
-          clientName: client ?? "",
-          description: desc ?? "",
-          unitId: unit ?? "",
+          clientName: booked?.clientName ?? client ?? "",
+          description: booked?.description ?? desc ?? "",
+          unitId: booked?.unitId ?? unit ?? "",
+          buyerName: booked?.buyerName ?? undefined,
+          poNumber: booked?.poNumber ?? undefined,
+          expectedCompletion:
+            booked?.expectedCompletion?.toISOString().slice(0, 10) ?? undefined,
+          finishedWeightKg: booked?.finishedWeightKg?.toString() ?? undefined,
+          reminderDaysBefore: booked?.reminderDaysBefore?.toString() ?? undefined,
+          priority: booked?.priority ?? undefined,
+          templateId: booked?.templateId ?? undefined,
+          stagesText: booked?.stagesText ?? undefined,
         }}
       />
     </div>

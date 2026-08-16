@@ -64,6 +64,7 @@ export async function GET() {
     ["Job", "finishedWeightKg"],
     ["Job", "drawingPending"],
     ["JobAttachment", "sourceJobId"],
+    ["FutureJob", "expectedCompletion"],
     ["Issue", "dueAt"],
     ["LeaveDay", "reason"],
     ["Stage", "plannedStart"],

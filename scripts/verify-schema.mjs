@@ -20,6 +20,7 @@ const COLUMNS = [
   ["Job", "finishedWeightKg"],
   ["Job", "drawingPending"],
   ["JobAttachment", "sourceJobId"],
+  ["FutureJob", "expectedCompletion"], // order book, read by the dashboard column
   ["Issue", "dueAt"],
   ["LeaveDay", "reason"],
   ["Stage", "plannedStart"],

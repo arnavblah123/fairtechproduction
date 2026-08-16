@@ -13,7 +13,22 @@ type Props = {
   }[];
   clientNames: string[];
   buyerNames: string[];
-  prefill?: { clientName: string; description: string; unitId: string };
+  prefill?: {
+    clientName: string;
+    description: string;
+    unitId: string;
+    buyerName?: string;
+    poNumber?: string;
+    expectedCompletion?: string; // yyyy-mm-dd
+    finishedWeightKg?: string;
+    reminderDaysBefore?: string;
+    priority?: boolean;
+    templateId?: string;
+    stagesText?: string;
+  };
+  /** Set when this form was opened to release an order-book entry: the
+   *  booking is deleted once the job is created. */
+  fromFutureJobId?: string;
 };
 
 const STANDARD_TESTS = [
@@ -31,12 +46,23 @@ const inputCls =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-base";
 const labelCls = "block text-sm font-medium mb-1";
 
-export function JobCreateForm({ units, templates, clientNames, buyerNames, prefill }: Props) {
+export function JobCreateForm({
+  units,
+  templates,
+  clientNames,
+  buyerNames,
+  prefill,
+  fromFutureJobId,
+}: Props) {
   const [state, action, pending] = useActionState(createJob, undefined);
-  const [selectedTemplate, setSelectedTemplate] = useState("");
-  const [stagesText, setStagesText] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState(prefill?.templateId ?? "");
+  const [stagesText, setStagesText] = useState(prefill?.stagesText ?? "");
   const [autoMatched, setAutoMatched] = useState<string | null>(null);
   const [materialReady, setMaterialReady] = useState("yes");
+  // Production goes straight onto the unit's board; the order book holds work
+  // that is sold but not yet released to the floor.
+  const [destination, setDestination] = useState<"PRODUCTION" | "ORDER_BOOK">("PRODUCTION");
+  const booking = destination === "ORDER_BOOK";
   // Remember the last auto/template fill so we never overwrite manual edits.
   const lastApplied = useRef("");
 
@@ -92,6 +118,50 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
         <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{state.error}</p>
       )}
 
+      {fromFutureJobId && (
+        <input type="hidden" name="fromFutureJobId" value={fromFutureJobId} />
+      )}
+
+      {/* Production or order book — the rest of the form is the same either way */}
+      <fieldset className="space-y-2">
+        <legend className={labelCls}>Where does this go? *</legend>
+        <div className="grid grid-cols-2 gap-2">
+          {(
+            [
+              ["PRODUCTION", "🏭 Production", "Goes on the unit's board now"],
+              ["ORDER_BOOK", "📒 Order book", "Booked, not yet on the floor"],
+            ] as const
+          ).map(([value, label, hint]) => (
+            <label
+              key={value}
+              className={`cursor-pointer rounded-lg border-2 px-3 py-2 text-center ${
+                destination === value
+                  ? "border-blue-600 bg-blue-50 text-blue-900"
+                  : "border-slate-200 text-slate-600 hover:border-slate-300"
+              }`}
+            >
+              <input
+                type="radio"
+                name="destination"
+                value={value}
+                checked={destination === value}
+                onChange={() => setDestination(value)}
+                className="sr-only"
+              />
+              <span className="block text-sm font-semibold">{label}</span>
+              <span className="block text-[11px] leading-tight mt-0.5">{hint}</span>
+            </label>
+          ))}
+        </div>
+        {booking && (
+          <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
+            Saved to the order book for this unit. No stages are created and no
+            work can be clocked against it — drawings, material and testing are
+            asked when you release it to production.
+          </p>
+        )}
+      </fieldset>
+
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Client name *</label>
@@ -110,7 +180,12 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
         </div>
         <div>
           <label className={labelCls}>Buyer (if different)</label>
-          <input name="buyerName" list="buyer-names" className={inputCls} />
+          <input
+            name="buyerName"
+            list="buyer-names"
+            defaultValue={prefill?.buyerName}
+            className={inputCls}
+          />
           <datalist id="buyer-names">
             {buyerNames.map((n) => (
               <option key={n} value={n} />
@@ -119,7 +194,7 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
         </div>
         <div>
           <label className={labelCls}>PO number / reference</label>
-          <input name="poNumber" className={inputCls} />
+          <input name="poNumber" defaultValue={prefill?.poNumber} className={inputCls} />
         </div>
         <div>
           <label className={labelCls}>Unit *</label>
@@ -159,7 +234,8 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
         )}
       </div>
 
-      {/* Drawings & BOM */}
+      {/* Drawings & BOM — asked when the order reaches the floor, not at booking */}
+      {!booking && (
       <fieldset className="border border-slate-200 rounded-lg p-3 space-y-3">
         <legend className="text-sm font-semibold px-1">Job documents</legend>
         <div>
@@ -184,11 +260,20 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
           Up to 10 MB per file. More documents can be added later from the job page.
         </p>
       </fieldset>
+      )}
 
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
-          <label className={labelCls}>Expected completion date *</label>
-          <input name="expectedCompletion" type="date" required className={inputCls} />
+          <label className={labelCls}>
+            {booking ? "Expected completion date (if promised)" : "Expected completion date *"}
+          </label>
+          <input
+            name="expectedCompletion"
+            type="date"
+            required={!booking}
+            defaultValue={prefill?.expectedCompletion}
+            className={inputCls}
+          />
         </div>
         <div>
           <label className={labelCls}>Finished weight (kg)</label>
@@ -198,6 +283,7 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
             min={1}
             step="any"
             placeholder="e.g. 4500"
+            defaultValue={prefill?.finishedWeightKg}
             className={inputCls}
           />
           <p className="text-xs text-slate-500 mt-1">
@@ -210,18 +296,24 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
             name="reminderDaysBefore"
             type="number"
             min={0}
-            defaultValue={7}
+            defaultValue={prefill?.reminderDaysBefore ?? 7}
             className={inputCls}
           />
         </div>
       </div>
 
       <label className="flex items-center gap-2 text-sm font-medium">
-        <input type="checkbox" name="priority" className="h-4 w-4" />
+        <input
+          type="checkbox"
+          name="priority"
+          defaultChecked={prefill?.priority}
+          className="h-4 w-4"
+        />
         Priority job
       </label>
 
       {/* Material availability — "No" auto-raises a Material Shortage issue */}
+      {!booking && (
       <fieldset className="border-t border-slate-100 pt-4 space-y-3">
         <legend className="text-sm font-semibold">Material</legend>
         <div>
@@ -258,6 +350,7 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
           </div>
         )}
       </fieldset>
+      )}
 
       {/* Stages: template pre-fills, always editable for this job */}
       <fieldset className="border-t border-slate-100 pt-4 space-y-3">
@@ -278,20 +371,23 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
         </div>
         <div>
           <label className={labelCls}>
-            Stages for this job — one per line, in order. *
+            {booking
+              ? "Stages, if the process is already known — one per line, in order."
+              : "Stages for this job — one per line, in order. *"}
           </label>
           <textarea
             name="customStages"
             rows={8}
-            required
+            required={!booking}
             value={stagesText}
             onChange={(e) => setStagesText(e.target.value)}
             placeholder={"Marking & Cutting\nEdge Preparation\nFit-up\nWelding\nTesting\nPainting & Dispatch"}
             className={inputCls}
           />
           <p className="text-xs text-slate-500 mt-1">
-            Free to add, remove or reorder lines for this job — the saved
-            template is not changed.
+            {booking
+              ? "Carried into the job when this order is released — still editable then."
+              : "Free to add, remove or reorder lines for this job — the saved template is not changed."}
           </p>
         </div>
         <div>
@@ -306,7 +402,8 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
         </div>
       </fieldset>
 
-      {/* Testing plan */}
+      {/* Testing plan — tied to stage numbers, so it waits for the real job */}
+      {!booking && (
       <fieldset className="border-t border-slate-100 pt-4 space-y-2">
         <legend className="text-sm font-semibold">
           Testing required on this job
@@ -333,16 +430,29 @@ export function JobCreateForm({ units, templates, clientNames, buyerNames, prefi
           Tick the tests needed and choose after which stage each one happens.
         </p>
       </fieldset>
+      )}
 
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-lg bg-blue-600 text-white py-2.5 font-medium hover:bg-blue-700 disabled:opacity-50"
+        className={`w-full rounded-lg text-white py-2.5 font-medium disabled:opacity-50 ${
+          booking ? "bg-amber-600 hover:bg-amber-700" : "bg-blue-600 hover:bg-blue-700"
+        }`}
       >
-        {pending ? "Creating…" : "Create Job"}
+        {pending
+          ? booking
+            ? "Adding to order book…"
+            : "Creating…"
+          : booking
+            ? "📒 Add to Order Book"
+            : fromFutureJobId
+              ? "Release to Production"
+              : "Create Job"}
       </button>
       <p className="text-xs text-slate-500 text-center">
-        The completion date is added to the deadline calendar automatically.
+        {booking
+          ? "Sits in the unit's order book until you release it to production."
+          : "The completion date is added to the deadline calendar automatically."}
       </p>
     </form>
   );
