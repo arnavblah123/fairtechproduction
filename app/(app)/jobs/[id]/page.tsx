@@ -30,6 +30,7 @@ import { workedByStage, fmtWorked } from "@/lib/idle";
 import { formatMoney } from "@/lib/format";
 import { overheadByJob } from "@/lib/overheads";
 import { getConsumableCostsWithStatus } from "@/lib/consumables";
+import { getConsumableItems } from "@/lib/consumable-items";
 import { otOverlapMinutes } from "@/lib/ot";
 import { updateOverheadItem } from "@/lib/actions/overheads";
 
@@ -110,6 +111,7 @@ export default async function JobPage({
     alerts,
     shiftEmployees,
     shiftJobsRaw,
+    consumableItems,
   ] = await Promise.all([
     // Workers available for assignment: the pool is shared — any active worker
     // from any unit can be put on this job. Grouped with this job's unit first.
@@ -128,7 +130,9 @@ export default async function JobPage({
         endedAt: true,
         endSource: true,
         otBonusMinutes: true,
-        employee: { select: { name: true } },
+        // Wage is rendered only in the owner's stage-cost line, never in
+        // the session history that everyone sees.
+        employee: { select: { name: true, hourlyWage: true } },
       },
       orderBy: { startedAt: "desc" },
     }),
@@ -194,6 +198,10 @@ export default async function JobPage({
           orderBy: { jobNumber: "asc" },
         })
       : Promise.resolve([]),
+    // Item-by-item consumables from the Store app — the owner's view only.
+    user.role === "SUPERADMIN"
+      ? getConsumableItems(job.jobNumber)
+      : Promise.resolve({ entries: [], problem: null }),
   ]);
   const workerGroups = [
     { label: `${job.unit.name} (this unit)`, list: employees.filter((e) => e.primaryUnitId === job.unitId) },
@@ -213,6 +221,67 @@ export default async function JobPage({
     arr.push(l);
     stageHistory.set(l.stageId!, arr);
   }
+
+  // ---- Owner-only stage costing --------------------------------------
+  // Labour per stage is exact: each session's minutes × that worker's wage
+  // (same basis as the job-level labour figure below, so stages add up).
+  // Consumables per stage are apportioned: the Store knows which JOB an
+  // item was issued to and on what date; each issue is split across the
+  // stages that had hours logged that day. Issues on days with no stage
+  // hours stay "unattributed" rather than being guessed onto a stage.
+  const IST_MS = 5.5 * 3600e3;
+  const istDayOf = (d: Date | string) =>
+    Math.floor((new Date(d).getTime() + IST_MS) / 86400000);
+  const nowMs = Date.now();
+  const stageLabourCost = new Map<string, number>();
+  const stageDayMinutes = new Map<number, Map<string, number>>();
+  if (user.role === "SUPERADMIN") {
+    for (const l of allStageLogs) {
+      const endMs = Math.min((l.endedAt ?? new Date(nowMs)).getTime(), nowMs);
+      const minutes = Math.max(0, (endMs - l.startedAt.getTime()) / 60000);
+      const wage = l.employee.hourlyWage ?? 0;
+      stageLabourCost.set(
+        l.stageId!,
+        (stageLabourCost.get(l.stageId!) ?? 0) + (wage * minutes) / 60
+      );
+      // Day attribution for the consumable split — start-day is close
+      // enough here; overnight tails are minutes, not issue events.
+      const day = istDayOf(l.startedAt);
+      const dayMap = stageDayMinutes.get(day) ?? new Map<string, number>();
+      dayMap.set(l.stageId!, (dayMap.get(l.stageId!) ?? 0) + minutes);
+      stageDayMinutes.set(day, dayMap);
+    }
+  }
+  const stageConsumables = new Map<string, number>();
+  let unattributedConsumables = 0;
+  const itemRollup = new Map<
+    string,
+    { item: string; unit: string; brands: string[]; qty: number; value: number }
+  >();
+  for (const entry of consumableItems.entries) {
+    const key = `${entry.code}|${entry.unit}`;
+    const row =
+      itemRollup.get(key) ??
+      { item: entry.item, unit: entry.unit, brands: entry.brands, qty: 0, value: 0 };
+    row.qty += entry.qty;
+    row.value += entry.value;
+    itemRollup.set(key, row);
+
+    const dayMap = stageDayMinutes.get(istDayOf(entry.date));
+    const dayTotal = dayMap ? [...dayMap.values()].reduce((s, m) => s + m, 0) : 0;
+    if (!dayMap || dayTotal <= 0) {
+      unattributedConsumables += entry.value;
+    } else {
+      for (const [stageId, m] of dayMap) {
+        stageConsumables.set(
+          stageId,
+          (stageConsumables.get(stageId) ?? 0) + (entry.value * m) / dayTotal
+        );
+      }
+    }
+  }
+  const consumableItemRows = [...itemRollup.values()].sort((a, b) => b.value - a.value);
+  const consumableItemsTotal = consumableItemRows.reduce((s, r) => s + r.value, 0);
 
   // Job cost: every logged hour on this job × that worker's hourly wage
   // (set by the owner on the Employees page). Everyone with access to the
@@ -417,8 +486,11 @@ export default async function JobPage({
 
             {/* Labour cost — visible to the owner only. Also shown when the
                 only spend so far is consumables, or when the owner needs to
-                be told why the consumable figure is missing. */}
-            {(workerCosts.length > 0 || overheads > 0 || consumableCost > 0 || consumableProblem) && (
+                be told why the consumable figure is missing. (The comment
+                always said owner-only; the role gate was missing, which
+                showed every worker's wage to any job viewer.) */}
+            {user.role === "SUPERADMIN" &&
+              (workerCosts.length > 0 || overheads > 0 || consumableCost > 0 || consumableProblem) && (
               <details className="mt-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm max-w-xl">
                 <summary className="cursor-pointer select-none font-semibold text-emerald-900">
                   💰 Cost so far: {formatMoney(labourCost + overheads + consumableCost)}
@@ -527,6 +599,101 @@ export default async function JobPage({
                 {consumableProblem && (
                   <p className="mt-1.5 pt-1.5 border-t border-emerald-100 text-xs text-amber-700">
                     Consumables not shown: {consumableProblem}
+                  </p>
+                )}
+
+                {/* Stage-wise cost split — owner only. Labour is exact;
+                    consumables are split by which stages ran that day. */}
+                {user.role === "SUPERADMIN" && stageLabourCost.size > 0 && (
+                  <div className="mt-1.5 pt-1.5 border-t border-emerald-100 text-xs">
+                    <p className="font-semibold text-emerald-800 mb-1">Stage-wise cost</p>
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-left text-emerald-700">
+                          <th className="py-0.5 pr-2">Stage</th>
+                          <th className="py-0.5 pr-2 text-right">Labour</th>
+                          <th className="py-0.5 pr-2 text-right">Consumables*</th>
+                          <th className="py-0.5 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {job.stages
+                          .filter(
+                            (s) =>
+                              (stageLabourCost.get(s.id) ?? 0) > 0 ||
+                              (stageConsumables.get(s.id) ?? 0) > 0
+                          )
+                          .map((s) => (
+                            <tr key={s.id} className="border-t border-emerald-100">
+                              <td className="py-0.5 pr-2">{s.sequence}. {s.name}</td>
+                              <td className="py-0.5 pr-2 text-right">
+                                {formatMoney(stageLabourCost.get(s.id) ?? 0)}
+                              </td>
+                              <td className="py-0.5 pr-2 text-right">
+                                {formatMoney(stageConsumables.get(s.id) ?? 0)}
+                              </td>
+                              <td className="py-0.5 text-right font-medium">
+                                {formatMoney(
+                                  (stageLabourCost.get(s.id) ?? 0) +
+                                    (stageConsumables.get(s.id) ?? 0)
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        {unattributedConsumables !== 0 && (
+                          <tr className="border-t border-emerald-100 text-emerald-700">
+                            <td className="py-0.5 pr-2">Issued/returned on days with no stage running</td>
+                            <td className="py-0.5 pr-2 text-right">—</td>
+                            <td className="py-0.5 pr-2 text-right">{formatMoney(unattributedConsumables)}</td>
+                            <td className="py-0.5 text-right">{formatMoney(unattributedConsumables)}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                    <p className="mt-1 text-emerald-700">
+                      * consumables are split by which stages had hours logged on the day each
+                      item was issued — the Store records the job, not the stage.
+                    </p>
+                  </div>
+                )}
+
+                {/* Item-by-item consumables from the Store — owner only */}
+                {user.role === "SUPERADMIN" && consumableItemRows.length > 0 && (
+                  <div className="mt-1.5 pt-1.5 border-t border-emerald-100 text-xs">
+                    <p className="font-semibold text-emerald-800 mb-1">
+                      Consumables item by item ({formatMoney(consumableItemsTotal)})
+                    </p>
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-left text-emerald-700">
+                          <th className="py-0.5 pr-2">Item</th>
+                          <th className="py-0.5 pr-2">Brand</th>
+                          <th className="py-0.5 pr-2 text-right">Qty</th>
+                          <th className="py-0.5 text-right">Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {consumableItemRows.map((r) => (
+                          <tr key={`${r.item}|${r.unit}`} className="border-t border-emerald-100">
+                            <td className="py-0.5 pr-2">{r.item}</td>
+                            <td className="py-0.5 pr-2">{r.brands.join(", ") || "—"}</td>
+                            <td className="py-0.5 pr-2 text-right whitespace-nowrap">
+                              {Number(r.qty.toFixed(2)).toLocaleString("en-IN")} {r.unit}
+                            </td>
+                            <td className="py-0.5 text-right font-medium">{formatMoney(r.value)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <p className="mt-1 text-emerald-700">
+                      Returns are netted off. Matches the &quot;issued directly&quot; figure;
+                      shared shop use and store overheads stay in their pooled lines above.
+                    </p>
+                  </div>
+                )}
+                {user.role === "SUPERADMIN" && consumableItems.problem && (
+                  <p className="mt-1.5 pt-1.5 border-t border-emerald-100 text-xs text-amber-700">
+                    Item details not shown: {consumableItems.problem}
                   </p>
                 )}
 
@@ -930,6 +1097,21 @@ export default async function JobPage({
                     fmtWorked(stageWorked.get(stage.id)!)
                   )}
                   <span className="font-normal text-slate-400"> · idle not counted</span>
+                </p>
+              )}
+
+              {/* What this stage has cost — the owner's eyes only */}
+              {user.role === "SUPERADMIN" &&
+                ((stageLabourCost.get(stage.id) ?? 0) > 0 ||
+                  (stageConsumables.get(stage.id) ?? 0) > 0) && (
+                <p className="text-xs font-semibold text-emerald-800 leading-snug">
+                  💰 {formatMoney((stageLabourCost.get(stage.id) ?? 0) + (stageConsumables.get(stage.id) ?? 0))}
+                  <span className="font-normal text-emerald-700">
+                    {" "}(labour {formatMoney(stageLabourCost.get(stage.id) ?? 0)}
+                    {(stageConsumables.get(stage.id) ?? 0) > 0 && (
+                      <> + consumables {formatMoney(stageConsumables.get(stage.id) ?? 0)}*</>
+                    )})
+                  </span>
                 </p>
               )}
 
