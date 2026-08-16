@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { runMonitor } from "@/lib/ai/monitor";
 import { runLabourReport } from "@/lib/labour-report";
 
-// Scheduled three times a day — 11:00, 16:00 and 20:00 IST. The morning and
-// afternoon runs work the production monitoring agent; the evening run sends
-// the labour-calling report (calls made, results entered, who did what, and
-// the pipeline by stage). The response says whether the mail actually left,
-// and why not when it didn't, so a silent failure shows up in the Vercel cron
-// log instead of simply producing no email.
+// Called three times a day — 11:00, 16:00 and 20:00 IST — but from two
+// different schedulers. Vercel's Hobby plan fires each cron only once a day,
+// so vercel.json spends that slot on the 20:00 IST run, which sends the
+// labour-calling report (calls made, results entered, who did what, and the
+// pipeline by stage). The two earlier runs, which work the production
+// monitoring agent, come from GitHub Actions instead
+// (.github/workflows/cron-monitor.yml). Asking Vercel for all three makes
+// the deployment invalid and nothing ships at all.
+//
+// The response says whether the mail actually left, and why not when it
+// didn't, so a silent failure shows up in the scheduler's log instead of
+// simply producing no email.
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 

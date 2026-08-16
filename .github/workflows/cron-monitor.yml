@@ -1,0 +1,37 @@
+# The production monitoring agent, scheduled from GitHub instead of Vercel.
+#
+# Vercel's Hobby plan allows each cron job to fire only once a day, and
+# vercel.json spends that one slot on the 20:00 IST labour report. Asking
+# Vercel for the 11:00 and 16:00 IST monitor runs as well makes the whole
+# deployment invalid — that is what silently stopped every deploy between
+# 8 and 16 August. GitHub Actions schedules are free and unlimited, so the
+# two monitor runs live here and the app keeps all three.
+#
+# Needs no setup to run. If CRON_SECRET is set on Vercel, add the same value
+# as a repository secret (Settings → Secrets and variables → Actions →
+# CRON_SECRET) or these calls come back 401.
+
+name: Production monitor
+
+on:
+  schedule:
+    - cron: "30 5 * * *" # 11:00 IST — morning monitor run
+    - cron: "0 10 * * *" # 15:30 IST — afternoon monitor run
+  workflow_dispatch: # lets you fire a run by hand from the Actions tab
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the monitoring agent
+        run: |
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+            --max-time 300 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://fairtechproduction.vercel.app/api/cron/daily")
+          echo "HTTP $code"
+          cat /tmp/out.json
+          echo
+          # A non-2xx means the agent did not run — fail loudly so the red
+          # cross in the Actions tab says so, rather than failing in silence.
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ]
