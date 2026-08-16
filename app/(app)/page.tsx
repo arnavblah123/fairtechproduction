@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { after } from "next/server";
 import { db } from "@/lib/db";
-import { requireUser, unitScope, lockHrToLabour} from "@/lib/permissions";
+import { requireUser, unitScope, lockHrToLabour, isAdmin } from "@/lib/permissions";
 import {
   JobStatusBadge,
   IssueBadge,
@@ -11,7 +11,7 @@ import { LiveDuration } from "@/components/live-duration";
 import { SearchSelect } from "@/components/search-select";
 import { formatDate, formatDateTime, jobCode, ACTIVITY_LABELS } from "@/lib/format";
 import { assignGeneralDuty, assignDispatchWorker, stopWorker } from "@/lib/actions/stages";
-import { setJobRank, dispatchJob } from "@/lib/actions/jobs";
+import { setJobRank, dispatchJob, undoFinalDone } from "@/lib/actions/jobs";
 import { startCrane, stopCrane } from "@/lib/actions/crane";
 import { setShiftPlan } from "@/lib/actions/stages";
 import { closeOverdueShifts, shiftPlanLabel } from "@/lib/shift";
@@ -45,6 +45,7 @@ export default async function DashboardPage({
 }) {
   const user = await requireUser();
   lockHrToLabour(user);
+  const admin = isAdmin(user);
   const { unit: unitFilter, client: clientFilter, status: statusFilter } =
     await searchParams;
 
@@ -666,6 +667,18 @@ export default async function DashboardPage({
                               ⏳ PO not received yet — you can dispatch without the value; add it
                               on the job once the PO arrives.
                             </p>
+                          )}
+                          {/* Put here by mistake? Admins can send it back. */}
+                          {admin && (
+                            <form action={undoFinalDone}>
+                              <input type="hidden" name="jobId" value={job.id} />
+                              <button
+                                className="text-[11px] text-slate-500 hover:text-slate-800 hover:underline"
+                                title="Marked Ready to Dispatch by mistake — sends the job back to In Progress and clears the dispatch date"
+                              >
+                                ↩ Remove from dispatch
+                              </button>
+                            </form>
                           )}
                         </div>
                       );
