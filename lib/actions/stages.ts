@@ -111,37 +111,41 @@ export async function assignWorker(formData: FormData) {
   if (open.some((l) => l.stageId === stageId)) return; // already on this stage
 
   const activate = stage.status === "PENDING" || stage.status === "PAUSED";
-  const newLogPromise = db.timeLog.create({
-    data: {
-      employeeId,
-      jobId: stage.jobId,
-      stageId,
-      unitId: stage.job.unitId,
-      startSource: "MANUAL",
-      startedById: user.id,
-    },
-  });
-  await db.$transaction([
+  // One interactive transaction, and the create is awaited exactly once
+  // inside it. A Prisma promise is lazy: handing the same one to
+  // $transaction and then awaiting it again runs the query twice, which is
+  // how a single assign used to put the worker on the stage twice.
+  const newLog = await db.$transaction(async (tx) => {
     // A worker can only be clocked on one stage at a time — close the rest.
-    db.timeLog.updateMany({
+    await tx.timeLog.updateMany({
       where: { employeeId, endedAt: null },
       data: { endedAt: new Date(), endSource: "MANUAL", endedById: user.id },
-    }),
-    newLogPromise,
+    });
+    const created = await tx.timeLog.create({
+      data: {
+        employeeId,
+        jobId: stage.jobId,
+        stageId,
+        unitId: stage.job.unitId,
+        startSource: "MANUAL",
+        startedById: user.id,
+      },
+    });
     // Assigning to a pending/paused stage activates it.
-    ...(activate
-      ? [
-          db.stage.update({
-            where: { id: stageId },
-            data: { status: "ACTIVE", startedAt: stage.startedAt ?? new Date() },
-          }),
-        ]
-      : []),
-    ...(activate && stage.job.status === "NOT_STARTED"
-      ? [db.job.update({ where: { id: stage.jobId }, data: { status: "IN_PROGRESS" } })]
-      : []),
-  ]);
-  const newLog = await newLogPromise;
+    if (activate) {
+      await tx.stage.update({
+        where: { id: stageId },
+        data: { status: "ACTIVE", startedAt: stage.startedAt ?? new Date() },
+      });
+      if (stage.job.status === "NOT_STARTED") {
+        await tx.job.update({
+          where: { id: stage.jobId },
+          data: { status: "IN_PROGRESS" },
+        });
+      }
+    }
+    return created;
+  });
   for (const log of open) {
     auditAfter(user.id, "timelog.stop", "TimeLog", log.id, { reason: "reassigned", toStageId: stageId });
   }
