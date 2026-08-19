@@ -20,7 +20,8 @@ const COLUMNS = [
   ["Job", "finishedWeightKg"],
   ["Job", "drawingPending"],
   ["JobAttachment", "sourceJobId"],
-  ["FutureJob", "expectedCompletion"], // order book, read by the dashboard column
+  ["FutureJob", "expectedCompletion"], // order book, read by the Order Book page
+  ["JobAttachment", "futureJobId"], // drawings booked against an order
   ["Issue", "dueAt"],
   ["LeaveDay", "reason"],
   ["Stage", "plannedStart"],

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser, isAdmin, lockHrToLabour } from "@/lib/permissions";
-import { deleteFutureJob } from "@/lib/actions/planning";
+import { deleteFutureJob, moveFutureJobUnit } from "@/lib/actions/planning";
+import { formatFileSize } from "@/lib/attachments";
 import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export default async function OrderBookPage({
   const user = await requireUser();
   lockHrToLabour(user);
   const admin = isAdmin(user);
+  const owner = user.role === "SUPERADMIN";
   const { unit: unitFilter } = await searchParams;
 
   const [units, orders] = await Promise.all([
@@ -31,7 +33,13 @@ export default async function OrderBookPage({
           : { OR: [{ unitId: null }, { unitId: { in: user.unitIds } }] }),
         ...(unitFilter ? { unitId: unitFilter } : {}),
       },
-      include: { addedBy: { select: { name: true } } },
+      include: {
+        addedBy: { select: { name: true } },
+        attachments: {
+          select: { id: true, filename: true, size: true, kind: true },
+          orderBy: { createdAt: "asc" },
+        },
+      },
       orderBy: [{ priority: "desc" }, { expectedCompletion: "asc" }, { createdAt: "asc" }],
     }),
   ]);
@@ -139,6 +147,44 @@ export default async function OrderBookPage({
                       booked by {o.addedBy.name}
                     </p>
                     {o.notes && <p className="text-xs text-slate-600">{o.notes}</p>}
+                    {o.attachments.length > 0 && (
+                      <ul className="space-y-0.5">
+                        {o.attachments.map((a) => (
+                          <li key={a.id}>
+                            <a
+                              href={`/api/attachments/${a.id}`}
+                              className="text-xs text-blue-700 hover:underline break-all"
+                            >
+                              {a.kind === "BOM" ? "📄" : "📐"} {a.filename}
+                              <span className="text-slate-400"> ({formatFileSize(a.size)})</span>
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {/* Which shop builds it — the owner's call, changeable
+                        any time before the order is released. */}
+                    {owner && units.length > 1 && (
+                      <form action={moveFutureJobUnit} className="flex items-center gap-1.5 pt-0.5">
+                        <input type="hidden" name="futureJobId" value={o.id} />
+                        <select
+                          name="unitId"
+                          defaultValue={o.unitId ?? ""}
+                          className="rounded border border-slate-300 px-1.5 py-1 text-xs bg-white"
+                          title="Move this order to another unit"
+                        >
+                          <option value="">Unit not decided</option>
+                          {units.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.code}
+                            </option>
+                          ))}
+                        </select>
+                        <button className="text-xs text-slate-600 hover:text-slate-900 hover:underline">
+                          Move
+                        </button>
+                      </form>
+                    )}
                     <div className="flex items-center justify-between gap-2 pt-0.5">
                       <Link
                         href={`/jobs/new?from=${o.id}`}

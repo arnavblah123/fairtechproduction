@@ -65,6 +65,7 @@ export async function GET() {
     ["Job", "drawingPending"],
     ["JobAttachment", "sourceJobId"],
     ["FutureJob", "expectedCompletion"],
+    ["JobAttachment", "futureJobId"],
     ["Issue", "dueAt"],
     ["LeaveDay", "reason"],
     ["Stage", "plannedStart"],

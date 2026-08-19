@@ -69,6 +69,16 @@ export async function createJob(
     if (orderExpected && isNaN(orderExpected.getTime())) {
       return { error: "Expected completion date is invalid." };
     }
+    // Drawings usually arrive with the order, long before a unit starts it.
+    let orderFiles: PendingAttachment[];
+    try {
+      orderFiles = [
+        ...(await readUploadedFiles(formData.getAll("drawings"), "DRAWING")),
+        ...(await readUploadedFiles(formData.getAll("bomFiles"), "BOM")),
+      ];
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
     const entry = await db.futureJob.create({
       data: {
         clientName,
@@ -85,10 +95,20 @@ export async function createJob(
         addedById: user.id,
       },
     });
+    if (orderFiles.length > 0) {
+      await db.jobAttachment.createMany({
+        data: orderFiles.map((a) => ({
+          ...a,
+          futureJobId: entry.id,
+          uploadedById: user.id,
+        })),
+      });
+    }
     await audit(user.id, "futureJob.add", "FutureJob", entry.id, {
       clientName,
       unitId,
       via: "job form",
+      attachments: orderFiles.map((a) => a.filename),
     });
     revalidatePath("/");
     revalidatePath("/planning");
@@ -279,6 +299,17 @@ export async function createJob(
     // Released from the order book: drop the booking in the same transaction
     // that creates the job, so the order can never sit in both places.
     if (fromFutureJobId) {
+      // Move first: deleting the booking cascades to anything still on it.
+      const carried = await tx.jobAttachment.updateMany({
+        where: { futureJobId: fromFutureJobId },
+        data: { jobId: created.id, futureJobId: null },
+      });
+      if (carried.count > 0) {
+        await audit(user.id, "futureJob.carryAttachments", "Job", created.id, {
+          fromFutureJobId,
+          count: carried.count,
+        }, tx);
+      }
       const removed = await tx.futureJob.deleteMany({ where: { id: fromFutureJobId } });
       if (removed.count > 0) {
         await audit(user.id, "futureJob.release", "FutureJob", fromFutureJobId, {
@@ -323,6 +354,11 @@ export async function updateJob(
     return { error: "Client, description and expected completion are required." };
   }
   if (unitId !== job.unitId) {
+    // Shifting work from one shop to another moves its running clocks, its
+    // crane time and its overhead share with it — the owner decides that.
+    if (user.role !== "SUPERADMIN") {
+      return { error: "Only the owner can move a job to a different unit." };
+    }
     try {
       assertUnitAccess(user, unitId);
     } catch {

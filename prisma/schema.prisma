@@ -345,8 +345,13 @@ model JobAttachment {
   // When this drawing was reused from an earlier job, which one it came from.
   sourceJobId String?
   id           String         @id @default(cuid())
-  jobId        String
-  job          Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  // Exactly one of jobId / futureJobId is set. A drawing uploaded against an
+  // order in the order book has no job yet; releasing the order moves the row
+  // onto the new job rather than copying the bytes.
+  jobId        String?
+  job          Job?           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  futureJobId  String?
+  futureJob    FutureJob?     @relation(fields: [futureJobId], references: [id], onDelete: Cascade)
   kind         AttachmentKind
   filename     String
   mimeType     String
@@ -357,6 +362,7 @@ model JobAttachment {
   createdAt    DateTime       @default(now())
 
   @@index([jobId])
+  @@index([futureJobId])
   @@index([kind])
 }
 
@@ -651,6 +657,7 @@ model FutureJob {
   notes         String?
   addedById     String
   addedBy       User      @relation("FutureJobAddedBy", fields: [addedById], references: [id])
+  attachments   JobAttachment[]
   createdAt     DateTime  @default(now())
 
   @@index([unitId])

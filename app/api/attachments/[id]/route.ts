@@ -15,9 +15,17 @@ export async function GET(
   const { id } = await params;
   const attachment = await db.jobAttachment.findUnique({
     where: { id },
-    include: { job: { select: { unitId: true } } },
+    include: {
+      job: { select: { unitId: true } },
+      futureJob: { select: { unitId: true } },
+    },
   });
-  if (!attachment || !canAccessUnit(user, attachment.job.unitId)) {
+  // Drawings booked with an order belong to that order's unit. An order with
+  // no unit decided yet is the owner's to see.
+  const unitId = attachment?.job?.unitId ?? attachment?.futureJob?.unitId ?? null;
+  const allowed =
+    unitId === null ? user.role === "SUPERADMIN" : canAccessUnit(user, unitId);
+  if (!attachment || !allowed) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

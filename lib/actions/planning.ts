@@ -191,6 +191,27 @@ export async function addFutureJob(formData: FormData) {
   revalidatePath("/planning");
 }
 
+// Move a booked order to a different unit. Owner-only: which shop builds
+// what is a loading decision, and the order carries its drawings with it.
+export async function moveFutureJobUnit(formData: FormData) {
+  const user = await requireUser();
+  if (user.role !== "SUPERADMIN") {
+    throw new Error("Only the owner can move an order to a different unit.");
+  }
+  const id = String(formData.get("futureJobId") ?? "");
+  const unitId = String(formData.get("unitId") ?? "") || null;
+  const entry = await db.futureJob.findUniqueOrThrow({ where: { id } });
+  if (entry.unitId === unitId) return;
+  await db.futureJob.update({ where: { id }, data: { unitId } });
+  await audit(user.id, "futureJob.moveUnit", "FutureJob", id, {
+    from: entry.unitId,
+    to: unitId,
+  });
+  revalidatePath("/order-book");
+  revalidatePath("/planning");
+  revalidatePath("/");
+}
+
 export async function deleteFutureJob(formData: FormData) {
   const user = await requireUser();
   if (!isAdmin(user)) throw new Error("Only admins can remove backlog entries.");

@@ -17,12 +17,15 @@ type Props = {
     unitId: string;
   };
   units: { id: string; name: string }[];
+  /** Moving a job between units is the owner's call — everyone else sees
+   *  which unit it is on, but cannot change it. */
+  canMoveUnit?: boolean;
 };
 
 const inputCls = "w-full rounded-lg border border-slate-300 px-3 py-2 text-base";
 const labelCls = "block text-sm font-medium mb-1";
 
-export function JobEditForm({ job, units }: Props) {
+export function JobEditForm({ job, units, canMoveUnit = false }: Props) {
   const [state, action, pending] = useActionState(updateJob, undefined);
   return (
     <form action={action} className="bg-white rounded-xl shadow p-6 space-y-4">
@@ -36,7 +39,14 @@ export function JobEditForm({ job, units }: Props) {
       </div>
       <div>
         <label className={labelCls}>Unit *</label>
-        <select name="unitId" required defaultValue={job.unitId} className={inputCls}>
+        <select
+          name="unitId"
+          required
+          defaultValue={job.unitId}
+          disabled={!canMoveUnit}
+          className={`${inputCls} disabled:bg-slate-100 disabled:text-slate-500`}
+          title={canMoveUnit ? "Move this job to another unit" : "Only the owner can move a job between units"}
+        >
           {units.map((u) => (
             <option key={u.id} value={u.id}>
               {u.name}

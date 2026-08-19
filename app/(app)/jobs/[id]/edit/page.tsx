@@ -37,6 +37,7 @@ export default async function EditJobPage({
           unitId: job.unitId,
         }}
         units={units.map((u) => ({ id: u.id, name: u.name }))}
+        canMoveUnit={user.role === "SUPERADMIN"}
       />
     </div>
   );

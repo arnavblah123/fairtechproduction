@@ -76,12 +76,32 @@ export async function deleteAttachment(formData: FormData) {
   // Explicit select — never drag the file bytes into Node just to delete a row.
   const attachment = await db.jobAttachment.findUniqueOrThrow({
     where: { id: attachmentId },
-    select: { jobId: true, filename: true, job: { select: { unitId: true } } },
+    select: {
+      jobId: true,
+      futureJobId: true,
+      filename: true,
+      job: { select: { unitId: true } },
+      futureJob: { select: { unitId: true } },
+    },
   });
-  assertUnitAccess(user, attachment.job.unitId);
+  // A document hangs off a job or off an order in the order book. An order
+  // with no unit decided yet is the owner's alone.
+  const unitId = attachment.job?.unitId ?? attachment.futureJob?.unitId ?? null;
+  if (unitId === null) {
+    if (user.role !== "SUPERADMIN") {
+      throw new Error("You do not have access to this document.");
+    }
+  } else {
+    assertUnitAccess(user, unitId);
+  }
   await db.jobAttachment.delete({ where: { id: attachmentId } });
-  await audit(user.id, "attachment.delete", "Job", attachment.jobId, {
-    filename: attachment.filename,
-  });
-  revalidatePath(`/jobs/${attachment.jobId}`);
+  await audit(
+    user.id,
+    "attachment.delete",
+    attachment.jobId ? "Job" : "FutureJob",
+    attachment.jobId ?? attachment.futureJobId ?? attachmentId,
+    { filename: attachment.filename }
+  );
+  if (attachment.jobId) revalidatePath(`/jobs/${attachment.jobId}`);
+  else revalidatePath("/order-book");
 }

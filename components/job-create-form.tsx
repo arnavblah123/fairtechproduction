@@ -156,8 +156,9 @@ export function JobCreateForm({
         {booking && (
           <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
             Saved to the order book for this unit. No stages are created and no
-            work can be clocked against it — drawings, material and testing are
-            asked when you release it to production.
+            work can be clocked against it. Attach the drawings now if you have
+            them — they land on the job when you release it. Material and
+            testing are asked at release.
           </p>
         )}
       </fieldset>
@@ -234,10 +235,12 @@ export function JobCreateForm({
         )}
       </div>
 
-      {/* Drawings & BOM — asked when the order reaches the floor, not at booking */}
-      {!booking && (
+      {/* Drawings & BOM — offered for a booking too: the drawing usually
+          arrives with the order, long before a unit starts it. */}
       <fieldset className="border border-slate-200 rounded-lg p-3 space-y-3">
-        <legend className="text-sm font-semibold px-1">Job documents</legend>
+        <legend className="text-sm font-semibold px-1">
+          {booking ? "Order documents" : "Job documents"}
+        </legend>
         <div>
           <label className={labelCls}>Drawings (PDF, DWG, images…)</label>
           <input
@@ -257,10 +260,12 @@ export function JobCreateForm({
           />
         </div>
         <p className="text-xs text-slate-500">
-          Up to 10 MB per file. More documents can be added later from the job page.
+          Up to 10 MB per file.{" "}
+          {booking
+            ? "They travel with the order and land on the job when you release it."
+            : "More documents can be added later from the job page."}
         </p>
       </fieldset>
-      )}
 
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
