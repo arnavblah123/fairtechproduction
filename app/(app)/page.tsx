@@ -577,8 +577,14 @@ export default async function DashboardPage({
                 {/* Ready to Dispatch: finished jobs awaiting the truck */}
                 {dispatchJobs.length > 0 && (
                   <div className="border-t-2 border-cyan-200 bg-cyan-50/60 px-4 py-3 space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">
-                      🚚 Ready to Dispatch
+                    <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700 flex items-center justify-between gap-2">
+                      <span>🚚 Ready to Dispatch</span>
+                      <Link
+                        href={`/dispatched?unit=${unit.id}`}
+                        className="font-medium normal-case tracking-normal text-slate-500 hover:text-slate-800 hover:underline"
+                      >
+                        already dispatched →
+                      </Link>
                     </p>
                     {dispatchJobs.map((job) => {
                       const dispatchWorkers = job.timeLogs.filter((l) => !l.stage);

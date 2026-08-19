@@ -589,6 +589,7 @@ export async function reopenJob(formData: FormData) {
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/jobs");
   revalidatePath("/history");
+  revalidatePath("/dispatched");
   revalidatePath("/");
 }
 
