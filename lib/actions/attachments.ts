@@ -66,6 +66,7 @@ export async function addAttachments(
   });
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/todo");
+  revalidatePath("/accounts"); // the desk's worklist counts missing drawings
   return undefined;
 }
 

@@ -13,6 +13,7 @@ export default async function AppLayout({
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
   const isHr = user.role === "HR";
   const isPurchaseHr = user.role === "PURCHASE_HR";
+  const isAccounts = user.role === "ACCOUNTS";
   // Fairtech Store (consumables app) — its own Vercel deployment, its own
   // login. Supervisors run the store day to day (issuing, inward, all of
   // it), so every production role gets the link; it is just a link, the
@@ -23,7 +24,13 @@ export default async function AppLayout({
 
   // HR accounts get exactly one page: Labour. Purchase/HR also see what the
   // shop floor needs (Issues) and what is coming up (Planning).
-  const links = isHr
+  const links = isAccounts
+    ? [
+        { href: "/accounts", label: "Accounts Desk" },
+        { href: "/order-book", label: "Order Book" },
+        { href: "/jobs/new", label: "New Job / Order" },
+      ]
+    : isHr
     ? [
         { href: "/labour", label: "Labour" },
         { href: "/labour-requests", label: "Labour Requests" },
@@ -42,6 +49,7 @@ export default async function AppLayout({
         { href: "/todo", label: "To-Do" },
         { href: "/order-book", label: "Order Book" },
         { href: "/dispatched", label: "Dispatched" },
+        ...(isAdmin ? [{ href: "/accounts", label: "Accounts Desk" }] : []),
         { href: "/labour-requests", label: "Labour Request" },
         ...(isAdmin ? [{ href: "/templates", label: "Templates" }] : []),
         { href: "/employees", label: "Employees" },
@@ -70,7 +78,7 @@ export default async function AppLayout({
           </Link>
           {/* Desktop nav; phones use the bottom tab bar instead. HR has no
               tab bar, so their single link stays visible on phones too. */}
-          <nav className={`flex-1 overflow-x-auto ${isHr || isPurchaseHr ? "" : "hidden sm:block"}`}>
+          <nav className={`flex-1 overflow-x-auto ${isHr || isPurchaseHr || isAccounts ? "" : "hidden sm:block"}`}>
             <ul className="flex gap-1 text-sm">
               {links.map((l) => (
                 <li key={l.href}>
@@ -108,7 +116,7 @@ export default async function AppLayout({
       </header>
       {/* Bottom padding on phones so content never hides behind the tab bar */}
       <main className="max-w-7xl mx-auto p-4 pb-20 sm:pb-4">{children}</main>
-      {!isHr && !isPurchaseHr && (
+      {!isHr && !isPurchaseHr && !isAccounts && (
         <MobileNav showAssistant={user.role === "SUPERADMIN"} />
       )}
     </div>

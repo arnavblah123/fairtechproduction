@@ -10,7 +10,14 @@ export default async function MorePage() {
   const user = await requireUser();
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
 
-  const links = user.role === "HR"
+  const links = user.role === "ACCOUNTS"
+    ? [
+        { href: "/accounts", label: "Accounts Desk", icon: "🧾" },
+        { href: "/order-book", label: "Order Book", icon: "📒" },
+        { href: "/jobs/new", label: "New Job / Order", icon: "➕" },
+        { href: "/account", label: "My Account & Password", icon: "⚙️" },
+      ]
+    : user.role === "HR"
     ? [
         { href: "/labour", label: "Labour App", icon: "💼" },
         { href: "/labour-requests", label: "Labour Requests", icon: "🧑‍🌾" },
@@ -22,6 +29,7 @@ export default async function MorePage() {
     { href: "/issues", label: "Issues", icon: "🚩" },
     { href: "/issues", label: "Report a factory problem", icon: "🏭" },
     { href: "/order-book", label: "Order Book", icon: "📒" },
+    ...(isAdmin ? [{ href: "/accounts", label: "Accounts Desk", icon: "🧾" }] : []),
     { href: "/dispatched", label: "Dispatched Jobs", icon: "🚚" },
     { href: "/planning", label: "Production Planning", icon: "🗓️" },
     { href: "/calendar", label: "Job Work Calendar", icon: "📅" },

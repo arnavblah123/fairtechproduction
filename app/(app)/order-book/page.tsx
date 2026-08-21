@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireUser, isAdmin, lockHrToLabour } from "@/lib/permissions";
+import { requireUser, isAdmin, allowAccounts, seesAllUnits } from "@/lib/permissions";
 import { deleteFutureJob, moveFutureJobUnit } from "@/lib/actions/planning";
 import { formatFileSize } from "@/lib/attachments";
 import { formatDate } from "@/lib/format";
@@ -16,19 +16,19 @@ export default async function OrderBookPage({
   searchParams: Promise<{ unit?: string }>;
 }) {
   const user = await requireUser();
-  lockHrToLabour(user);
+  allowAccounts(user); // booking orders is the accounts desk's job
   const admin = isAdmin(user);
   const owner = user.role === "SUPERADMIN";
   const { unit: unitFilter } = await searchParams;
 
   const [units, orders] = await Promise.all([
     db.unit.findMany({
-      where: user.role === "SUPERADMIN" ? {} : { id: { in: user.unitIds } },
+      where: seesAllUnits(user) ? {} : { id: { in: user.unitIds } },
       orderBy: { name: "asc" },
     }),
     db.futureJob.findMany({
       where: {
-        ...(user.role === "SUPERADMIN"
+        ...(seesAllUnits(user)
           ? {}
           : { OR: [{ unitId: null }, { unitId: { in: user.unitIds } }] }),
         ...(unitFilter ? { unitId: unitFilter } : {}),

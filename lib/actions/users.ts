@@ -34,7 +34,7 @@ export async function createUser(
   if (password.length < 8) return { error: "Password must be at least 8 characters." };
   // HR sees only the Labour page and Purchase/HR covers every unit — neither
   // needs a unit assignment.
-  if (unitIds.length === 0 && role !== "HR" && role !== "PURCHASE_HR") {
+  if (unitIds.length === 0 && role !== "HR" && role !== "PURCHASE_HR" && role !== "ACCOUNTS") {
     return { error: "Assign at least one unit." };
   }
   if (actor.role === "ADMIN" && unitIds.some((u) => !actor.unitIds.includes(u))) {

@@ -13,6 +13,8 @@ type Props = {
   }[];
   clientNames: string[];
   buyerNames: string[];
+  /** Job names already used, so the same part is spelled the same way twice. */
+  jobNames: string[];
   prefill?: {
     clientName: string;
     description: string;
@@ -42,6 +44,16 @@ const STANDARD_TESTS = [
   "Final Inspection",
 ];
 
+type JobMemory = {
+  jobId: string;
+  label: string;
+  templateId: string | null;
+  templateName: string | null;
+  stageNames: string[];
+  drawings: string[];
+  boms: string[];
+};
+
 const inputCls =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-base";
 const labelCls = "block text-sm font-medium mb-1";
@@ -51,6 +63,7 @@ export function JobCreateForm({
   templates,
   clientNames,
   buyerNames,
+  jobNames,
   prefill,
   fromFutureJobId,
 }: Props) {
@@ -63,6 +76,11 @@ export function JobCreateForm({
   // that is sold but not yet released to the floor.
   const [destination, setDestination] = useState<"PRODUCTION" | "ORDER_BOOK">("PRODUCTION");
   const booking = destination === "ORDER_BOOK";
+  // What this job name was built as last time — looked up when the name is
+  // typed, so the process and the drawings need not be re-entered.
+  const [memory, setMemory] = useState<JobMemory | null>(null);
+  const [templateAnswer, setTemplateAnswer] = useState<"" | "same" | "different">("");
+  const [filesAnswer, setFilesAnswer] = useState<"" | "same" | "changed">("");
   // Remember the last auto/template fill so we never overwrite manual edits.
   const lastApplied = useRef("");
 
@@ -81,7 +99,26 @@ export function JobCreateForm({
     }
   }
 
-  // Typing a known equipment name in the description auto-selects its
+  // Leaving the job name asks the server what that name was built as last
+  // time. Nothing is applied automatically — the answers below decide.
+  async function lookupJobName(value: string) {
+    const name = value.trim();
+    if (name.length < 2) {
+      setMemory(null);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/job-memory?name=${encodeURIComponent(name)}`);
+      const data = res.ok ? await res.json() : { found: false };
+      setMemory(data.found ? (data as JobMemory) : null);
+      setTemplateAnswer("");
+      setFilesAnswer("");
+    } catch {
+      setMemory(null); // offline or slow — the form still works by hand
+    }
+  }
+
+  // Typing a known equipment name in the job name auto-selects its
   // template — but only while the stage box hasn't been edited by hand.
   function onDescriptionChange(value: string) {
     const lower = value.toLowerCase();
@@ -213,19 +250,27 @@ export function JobCreateForm({
       </div>
 
       <div>
-        <label className={labelCls}>Description / equipment type *</label>
+        <label className={labelCls}>Job name *</label>
         <input
           name="description"
           required
           list="equipment-names"
           defaultValue={prefill?.description}
           onChange={(e) => onDescriptionChange(e.target.value)}
-          placeholder="e.g. Transformer Tank, APH, Bag Filter, Pressure Vessel"
+          onBlur={(e) => lookupJobName(e.target.value)}
+          placeholder="e.g. SFTSRG 15, CPRG 180, Transformer Tank, APH"
           className={inputCls}
         />
+        {/* Names already used, so the same part is spelled the same way and
+            its history can be found next time. */}
         <datalist id="equipment-names">
-          {[...new Set(templates.map((t) => t.equipmentName).filter(Boolean))].map((n) => (
-            <option key={n!} value={n!} />
+          {[
+            ...new Set([
+              ...jobNames,
+              ...templates.map((t) => t.equipmentName).filter(Boolean) as string[],
+            ]),
+          ].map((n) => (
+            <option key={n} value={n} />
           ))}
         </datalist>
         {autoMatched && (
@@ -234,6 +279,122 @@ export function JobCreateForm({
           </p>
         )}
       </div>
+
+      {/* Built before under this name: reuse the process and the documents
+          rather than typing and uploading them again. Both questions are
+          asked, never assumed — the same name is not always the same part. */}
+      {memory && (
+        <fieldset className="rounded-lg border-2 border-blue-200 bg-blue-50/60 p-3 space-y-3">
+          <legend className="text-sm font-semibold px-1 text-blue-900">
+            ♻️ Built before — {memory.label}
+          </legend>
+
+          {memory.stageNames.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">
+                Same process as last time?
+                {memory.templateName && (
+                  <span className="font-normal text-slate-600"> ({memory.templateName})</span>
+                )}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTemplateAnswer("same");
+                    const text = memory.stageNames.join("\n");
+                    setStagesText(text);
+                    lastApplied.current = text;
+                    if (memory.templateId) setSelectedTemplate(memory.templateId);
+                  }}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+                    templateAnswer === "same"
+                      ? "bg-blue-600 text-white"
+                      : "bg-white border border-blue-300 text-blue-800"
+                  }`}
+                >
+                  Yes — use the same {memory.stageNames.length} stages
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTemplateAnswer("different")}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+                    templateAnswer === "different"
+                      ? "bg-slate-700 text-white"
+                      : "bg-white border border-slate-300 text-slate-700"
+                  }`}
+                >
+                  No — this one is different
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(memory.drawings.length > 0 || memory.boms.length > 0) && (
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">
+                Any change in the drawing or BOM since then?
+                <span className="block text-xs font-normal text-slate-600">
+                  Last time: {memory.drawings.length} drawing
+                  {memory.drawings.length === 1 ? "" : "s"}, {memory.boms.length} BOM
+                  {memory.boms.length === 1 ? "" : "s"}
+                </span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <label
+                  className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm font-medium ${
+                    filesAnswer === "same"
+                      ? "bg-blue-600 text-white"
+                      : "bg-white border border-blue-300 text-blue-800"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="reuseFiles"
+                    value="same"
+                    checked={filesAnswer === "same"}
+                    onChange={() => setFilesAnswer("same")}
+                    className="sr-only"
+                  />
+                  No change — use last time&apos;s files
+                </label>
+                <label
+                  className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm font-medium ${
+                    filesAnswer === "changed"
+                      ? "bg-slate-700 text-white"
+                      : "bg-white border border-slate-300 text-slate-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="reuseFiles"
+                    value="changed"
+                    checked={filesAnswer === "changed"}
+                    onChange={() => setFilesAnswer("changed")}
+                    className="sr-only"
+                  />
+                  Changed — I will attach new ones
+                </label>
+              </div>
+              {filesAnswer === "same" && (
+                <>
+                  <input type="hidden" name="reuseFilesFromJobId" value={memory.jobId} />
+                  <p className="text-xs text-blue-900">
+                    ✓ {memory.drawings.concat(memory.boms).join(", ")} will be copied onto this{" "}
+                    {booking ? "order" : "job"}.
+                  </p>
+                </>
+              )}
+              {filesAnswer === "changed" && (
+                <p className="text-xs text-amber-800">
+                  Nothing is copied — attach the new files below. Left empty, the
+                  {booking ? " order" : " job"} is flagged as waiting for its drawing.
+                </p>
+              )}
+            </div>
+          )}
+        </fieldset>
+      )}
 
       {/* Drawings & BOM — offered for a booking too: the drawing usually
           arrives with the order, long before a unit starts it. */}

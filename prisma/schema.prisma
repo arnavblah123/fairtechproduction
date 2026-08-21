@@ -19,6 +19,9 @@ enum Role {
   SUPERVISOR
   HR // access to the Labour page (wages / ESI-PF) only
   PURCHASE_HR // Labour app + issues (what's needed) + planning, nothing else
+  // The accounts desk: books orders and owns a job's paperwork — PO number,
+  // PO value, finished weight, drawings and BOM. No shop-floor powers.
+  ACCOUNTS
 }
 
 model User {

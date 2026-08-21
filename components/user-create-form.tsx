@@ -37,6 +37,9 @@ export function UserCreateForm({
           {canCreateAdmins && (
             <option value="PURCHASE_HR">Purchase / HR (Labour + Issues + Planning)</option>
           )}
+          {canCreateAdmins && (
+            <option value="ACCOUNTS">Accounts (PO, weight, drawings, order book)</option>
+          )}
         </select>
       </div>
       <div className="flex flex-wrap gap-3 items-center text-sm">

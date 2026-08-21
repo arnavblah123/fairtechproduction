@@ -55,6 +55,8 @@ export default async function UsersPage() {
                       "— (Labour app only)"
                     ) : u.role === "PURCHASE_HR" ? (
                       "All units (Issues, Planning, Labour)"
+                    ) : u.role === "ACCOUNTS" ? (
+                      "All units (PO, weight, drawings, order book)"
                     ) : manageable ? (
                       <form action={setUserUnits} className="flex flex-wrap items-center gap-2">
                         <input type="hidden" name="userId" value={u.id} />
@@ -170,6 +172,9 @@ export default async function UsersPage() {
                               <option value="HR">HR (Labour app only)</option>
                               <option value="PURCHASE_HR">
                                 Purchase / HR (Labour + Issues + Planning)
+                              </option>
+                              <option value="ACCOUNTS">
+                                Accounts (PO, weight, drawings, order book)
                               </option>
                             </select>
                             <button className="rounded bg-slate-900 text-white px-2 py-1 text-xs">

@@ -8,8 +8,30 @@ import { audit } from "@/lib/audit";
 import { requireUser, isAdmin, assertUnitAccess } from "@/lib/permissions";
 import { syncJobToCalendar, deleteCalendarEvent } from "@/lib/google-calendar";
 import { readUploadedFiles, type PendingAttachment } from "@/lib/attachments";
-import type { JobStatus } from "@prisma/client";
+import type { JobStatus, Prisma } from "@prisma/client";
 import type { FormState } from "./auth";
+
+// Copy every drawing and BOM from an earlier job onto a new job or onto an
+// order-book entry. The copy happens inside Postgres: the file bytes never
+// travel to the app server. sourceJobId records where each came from, so the
+// job page can still say which job it was drawn for.
+async function copyJobFiles(
+  fromJobId: string,
+  target: { jobId: string } | { futureJobId: string },
+  userId: string,
+  tx?: Prisma.TransactionClient
+) {
+  const client = tx ?? db;
+  const jobId = "jobId" in target ? target.jobId : null;
+  const futureJobId = "futureJobId" in target ? target.futureJobId : null;
+  await client.$executeRaw`
+    INSERT INTO "JobAttachment"
+      ("id", "jobId", "futureJobId", "kind", "filename", "mimeType", "size", "data", "sourceJobId", "uploadedById")
+    SELECT gen_random_uuid()::text, ${jobId}, ${futureJobId}, "kind", "filename",
+           "mimeType", "size", "data", ${fromJobId}, ${userId}
+    FROM "JobAttachment"
+    WHERE "jobId" = ${fromJobId} AND "kind" IN ('DRAWING'::"AttachmentKind", 'BOM'::"AttachmentKind")`;
+}
 
 // Job creation (spec §4): client/buyer/PO/unit/description, template or
 // custom stages, mandatory expected completion date, optional save-as-template.
@@ -46,6 +68,12 @@ export async function createJob(
   // Set when the form was opened from an order-book entry — that entry is
   // removed once the real job exists, so the work is never counted twice.
   const fromFutureJobId = String(formData.get("fromFutureJobId") ?? "") || null;
+  // "This job name was built before and nothing has changed" — copy that
+  // job's drawings and BOM instead of asking for them to be uploaded again.
+  const reuseFilesFromJobId =
+    String(formData.get("reuseFiles") ?? "") === "same"
+      ? String(formData.get("reuseFilesFromJobId") ?? "") || null
+      : null;
 
   if (!clientName || !description || !unitId) {
     return { error: "Client name, description and unit are required." };
@@ -104,6 +132,9 @@ export async function createJob(
         })),
       });
     }
+    if (reuseFilesFromJobId) {
+      await copyJobFiles(reuseFilesFromJobId, { futureJobId: entry.id }, user.id);
+    }
     await audit(user.id, "futureJob.add", "FutureJob", entry.id, {
       clientName,
       unitId,
@@ -112,7 +143,8 @@ export async function createJob(
     });
     revalidatePath("/");
     revalidatePath("/planning");
-    redirect("/");
+    revalidatePath("/order-book");
+    redirect("/order-book");
   }
 
   if (!materialReady && !materialNote) {
@@ -296,6 +328,15 @@ export async function createJob(
         reason: "material not available at job creation",
       }, tx);
     }
+    // Built before with no changes: bring last time's drawings and BOM over.
+    if (reuseFilesFromJobId) {
+      await copyJobFiles(reuseFilesFromJobId, { jobId: created.id }, user.id, tx);
+      await audit(user.id, "drawing.reuse", "Job", created.id, {
+        fromJobId: reuseFilesFromJobId,
+        confirmed: "no changes since last time",
+      }, tx);
+    }
+
     // Released from the order book: drop the booking in the same transaction
     // that creates the job, so the order can never sit in both places.
     if (fromFutureJobId) {

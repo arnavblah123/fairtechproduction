@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { requireUser, lockHrToLabour} from "@/lib/permissions";
+import { requireUser, allowAccounts, seesAllUnits } from "@/lib/permissions";
 import { JobCreateForm } from "@/components/job-create-form";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export default async function NewJobPage({
   searchParams: Promise<{ client?: string; desc?: string; unit?: string; from?: string }>;
 }) {
   const user = await requireUser();
-  lockHrToLabour(user);
+  allowAccounts(user); // the accounts desk books orders from this same form
   const { client, desc, unit, from } = await searchParams;
   // ?from=<order book id> — releasing a booked order into production. Every
   // field it already holds is filled in, and the booking is deleted when the
@@ -18,9 +18,9 @@ export default async function NewJobPage({
   const booked = from
     ? await db.futureJob.findUnique({ where: { id: from } })
     : null;
-  const [units, templates, clients, buyers] = await Promise.all([
+  const [units, templates, clients, buyers, names] = await Promise.all([
     db.unit.findMany({
-      where: user.role === "SUPERADMIN" ? {} : { id: { in: user.unitIds } },
+      where: seesAllUnits(user) ? {} : { id: { in: user.unitIds } },
       orderBy: { name: "asc" },
     }),
     db.jobTemplate.findMany({
@@ -39,6 +39,14 @@ export default async function NewJobPage({
       distinct: ["buyerName"],
       select: { buyerName: true },
       orderBy: { buyerName: "asc" },
+    }),
+    // Job names already used — typing the same one back brings up what it
+    // was built as last time.
+    db.job.findMany({
+      distinct: ["description"],
+      select: { description: true },
+      orderBy: { description: "asc" },
+      take: 500,
     }),
   ]);
 
@@ -78,6 +86,7 @@ export default async function NewJobPage({
         }))}
         clientNames={clients.map((c) => c.clientName)}
         buyerNames={buyers.map((b) => b.buyerName!).filter(Boolean)}
+        jobNames={names.map((n) => n.description)}
         prefill={{
           clientName: booked?.clientName ?? client ?? "",
           description: booked?.description ?? desc ?? "",
