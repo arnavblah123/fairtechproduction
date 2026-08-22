@@ -70,10 +70,10 @@ export async function createJob(
   const fromFutureJobId = String(formData.get("fromFutureJobId") ?? "") || null;
   // "This job name was built before and nothing has changed" — copy that
   // job's drawings and BOM instead of asking for them to be uploaded again.
-  const reuseFilesFromJobId =
-    String(formData.get("reuseFiles") ?? "") === "same"
-      ? String(formData.get("reuseFilesFromJobId") ?? "") || null
-      : null;
+  const reuseFilesFromJobId = String(formData.get("reuseFilesFromJobId") ?? "") || null;
+  // Said outright that the drawing has changed, and attached nothing: the
+  // job is flagged so no one builds to the old drawing by accident.
+  const drawingChanged = String(formData.get("reuseFiles") ?? "") === "changed";
 
   if (!clientName || !description || !unitId) {
     return { error: "Client name, description and unit are required." };
@@ -290,6 +290,17 @@ export async function createJob(
             name: s.name,
             stageId: createdStages[pos]?.id ?? null,
           })),
+      });
+    }
+    if (drawingChanged && attachments.length === 0 && !reuseFilesFromJobId) {
+      await tx.job.update({ where: { id: created.id }, data: { drawingPending: true } });
+      await tx.todoItem.create({
+        data: {
+          message: `Upload updated drawing for ${description}`,
+          jobId: created.id,
+          unitId,
+          createdById: user.id,
+        },
       });
     }
     if (attachments.length > 0) {

@@ -26,7 +26,7 @@ export function DrawingPicker({ jobId, jobName }: { jobId: string; jobName: stri
 
   useEffect(() => {
     if (mode !== "reuse" || pastJobs !== null) return;
-    fetch(`/api/jobs/${jobId}/past-drawings`)
+    fetch(`/api/past-drawings?exclude=${jobId}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((data) => setPastJobs(data.jobs))
       .catch(() => setLoadError(true));

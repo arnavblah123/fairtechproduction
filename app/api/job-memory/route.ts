@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
       jobNumber: true,
       clientName: true,
       createdAt: true,
+      finishedWeightKg: true,
       templateId: true,
       template: { select: { id: true, name: true, stages: { orderBy: { sequence: "asc" }, select: { name: true } } } },
       stages: { orderBy: { sequence: "asc" }, select: { name: true } },
@@ -44,6 +45,7 @@ export async function GET(req: NextRequest) {
     found: true,
     jobId: previous.id,
     label: `${jobCode(previous.jobNumber)} · ${previous.clientName} · ${formatDate(previous.createdAt)}`,
+    finishedWeightKg: previous.finishedWeightKg,
     templateId: previous.template?.id ?? null,
     templateName: previous.template?.name ?? null,
     // The stages as they were actually run last time — a job's stage list is

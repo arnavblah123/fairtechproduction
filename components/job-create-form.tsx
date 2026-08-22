@@ -47,11 +47,20 @@ const STANDARD_TESTS = [
 type JobMemory = {
   jobId: string;
   label: string;
+  finishedWeightKg: number | null;
   templateId: string | null;
   templateName: string | null;
   stageNames: string[];
   drawings: string[];
   boms: string[];
+};
+
+type PastJob = {
+  jobId: string;
+  label: string;
+  finishedWeightKg: number | null;
+  drawings: { id: string; filename: string }[];
+  boms: { id: string; filename: string }[];
 };
 
 const inputCls =
@@ -81,6 +90,36 @@ export function JobCreateForm({
   const [memory, setMemory] = useState<JobMemory | null>(null);
   const [templateAnswer, setTemplateAnswer] = useState<"" | "same" | "different">("");
   const [filesAnswer, setFilesAnswer] = useState<"" | "same" | "changed">("");
+  // Controlled so that reusing an earlier job's documents can fill in the
+  // weight too — the same part built again weighs the same.
+  const [weight, setWeight] = useState(prefill?.finishedWeightKg ?? "");
+  // Picking documents off any earlier job, not just the one this job name
+  // matched. Nothing is applied until the change question is answered.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pastJobs, setPastJobs] = useState<PastJob[] | null>(null);
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [pickerError, setPickerError] = useState(false);
+  const [candidate, setCandidate] = useState<PastJob | null>(null);
+  const [reuseFrom, setReuseFrom] = useState<PastJob | null>(null);
+
+  // The list is fetched the first time the picker is opened — it scans every
+  // job that has a drawing, so it must not run on every form view.
+  function openPicker() {
+    setPickerOpen(true);
+    if (pastJobs !== null) return;
+    fetch("/api/past-drawings")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => setPastJobs(data.jobs))
+      .catch(() => setPickerError(true));
+  }
+
+  function applyReuse(job: PastJob) {
+    setReuseFrom(job);
+    setCandidate(null);
+    setPickerOpen(false);
+    setFilesAnswer(""); // the picker's answer replaces the name-match one
+    if (job.finishedWeightKg) setWeight(String(job.finishedWeightKg));
+  }
   // Remember the last auto/template fill so we never overwrite manual edits.
   const lastApplied = useRef("");
 
@@ -353,7 +392,11 @@ export function JobCreateForm({
                     name="reuseFiles"
                     value="same"
                     checked={filesAnswer === "same"}
-                    onChange={() => setFilesAnswer("same")}
+                    onChange={() => {
+                      setFilesAnswer("same");
+                      setReuseFrom(null); // the picker's choice, if any, gives way
+                      if (memory.finishedWeightKg) setWeight(String(memory.finishedWeightKg));
+                    }}
                     className="sr-only"
                   />
                   No change — use last time&apos;s files
@@ -370,7 +413,10 @@ export function JobCreateForm({
                     name="reuseFiles"
                     value="changed"
                     checked={filesAnswer === "changed"}
-                    onChange={() => setFilesAnswer("changed")}
+                    onChange={() => {
+                      setFilesAnswer("changed");
+                      setReuseFrom(null);
+                    }}
                     className="sr-only"
                   />
                   Changed — I will attach new ones
@@ -381,7 +427,11 @@ export function JobCreateForm({
                   <input type="hidden" name="reuseFilesFromJobId" value={memory.jobId} />
                   <p className="text-xs text-blue-900">
                     ✓ {memory.drawings.concat(memory.boms).join(", ")} will be copied onto this{" "}
-                    {booking ? "order" : "job"}.
+                    {booking ? "order" : "job"}
+                    {memory.finishedWeightKg
+                      ? `, and the weight filled in as ${memory.finishedWeightKg} kg`
+                      : ""}
+                    .
                   </p>
                 </>
               )}
@@ -426,6 +476,136 @@ export function JobCreateForm({
             ? "They travel with the order and land on the job when you release it."
             : "More documents can be added later from the job page."}
         </p>
+
+        {/* Reuse from any earlier job — not only the one this job name
+            matched. The change question is always asked before anything is
+            copied: building to last month's drawing costs far more than
+            uploading a new file. */}
+        <div className="border-t border-slate-100 pt-3 space-y-2">
+          {reuseFrom ? (
+            <div className="rounded-lg bg-green-50 border border-green-200 p-3 space-y-1">
+              <p className="text-sm font-medium text-green-900">
+                ♻️ Reusing documents from {reuseFrom.label}
+              </p>
+              <p className="text-xs text-green-800">
+                {reuseFrom.drawings.length} drawing
+                {reuseFrom.drawings.length === 1 ? "" : "s"}
+                {reuseFrom.boms.length > 0 && (
+                  <> and {reuseFrom.boms.length} BOM{reuseFrom.boms.length === 1 ? "" : "s"}</>
+                )}{" "}
+                will be copied onto this {booking ? "order" : "job"}
+                {reuseFrom.finishedWeightKg ? `, weight ${reuseFrom.finishedWeightKg} kg filled in` : ""}.
+              </p>
+              <input type="hidden" name="reuseFilesFromJobId" value={reuseFrom.jobId} />
+              <button
+                type="button"
+                onClick={() => setReuseFrom(null)}
+                className="text-xs text-red-700 hover:underline"
+              >
+                Remove — I will attach new files
+              </button>
+            </div>
+          ) : !pickerOpen ? (
+            <button
+              type="button"
+              onClick={openPicker}
+              className="rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-2 text-sm font-medium"
+            >
+              ♻️ Use drawings from a previous job
+            </button>
+          ) : (
+            <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+              {candidate ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">{candidate.label}</p>
+                  <ul className="text-xs text-slate-600 space-y-0.5">
+                    {candidate.drawings.concat(candidate.boms).map((f) => (
+                      <li key={f.id} className="break-all">
+                        {f.filename}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-sm font-medium text-amber-900 bg-amber-50 rounded-lg px-3 py-2">
+                    Confirm: has anything changed in the drawing or BOM since
+                    that job? If there is any doubt at all, say no and attach
+                    the new file instead.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => applyReuse(candidate)}
+                      className="rounded-lg bg-green-600 text-white px-3 py-1.5 text-sm font-medium"
+                    >
+                      No change — use these files
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCandidate(null)}
+                      className="rounded-lg bg-white border border-slate-300 px-3 py-1.5 text-sm font-medium"
+                    >
+                      Not sure — go back
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={pickerQuery}
+                      onChange={(e) => setPickerQuery(e.target.value)}
+                      placeholder="Search by job number, name or client…"
+                      className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPickerOpen(false)}
+                      className="text-sm text-slate-500 hover:underline"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  {pickerError ? (
+                    <p className="text-xs text-red-600">
+                      Could not load previous jobs. Attach the files by hand.
+                    </p>
+                  ) : pastJobs === null ? (
+                    <p className="text-xs text-slate-500">Loading previous jobs…</p>
+                  ) : (
+                    <ul className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+                      {pastJobs
+                        .filter((j) =>
+                          j.label.toLowerCase().includes(pickerQuery.trim().toLowerCase())
+                        )
+                        .slice(0, 30)
+                        .map((j) => (
+                          <li key={j.jobId}>
+                            <button
+                              type="button"
+                              onClick={() => setCandidate(j)}
+                              className="w-full text-left py-2 text-sm hover:bg-slate-50"
+                            >
+                              {j.label}
+                              <span className="block text-xs text-slate-500">
+                                {j.drawings.length} drawing
+                                {j.drawings.length === 1 ? "" : "s"}
+                                {j.boms.length > 0 && <>, {j.boms.length} BOM</>}
+                                {j.finishedWeightKg ? ` · ${j.finishedWeightKg} kg` : ""}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      {pastJobs.length === 0 && (
+                        <li className="py-2 text-sm text-slate-400">
+                          No earlier job has a drawing yet.
+                        </li>
+                      )}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </fieldset>
 
       <div className="grid sm:grid-cols-2 gap-4">
@@ -449,7 +629,8 @@ export function JobCreateForm({
             min={1}
             step="any"
             placeholder="e.g. 4500"
-            defaultValue={prefill?.finishedWeightKg}
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
             className={inputCls}
           />
           <p className="text-xs text-slate-500 mt-1">
